@@ -4,6 +4,7 @@ Tests the updated auth contract: flat error envelope, token+user response,
 duplicate → 409, accept_terms required, name required, new endpoints.
 """
 
+import asyncio
 import pytest
 from httpx import AsyncClient
 
@@ -91,6 +92,23 @@ async def test_signup_duplicate_email_returns_409(client: AsyncClient):
     assert data["code"] == "EMAIL_EXISTS"
     # Must NOT have the old nested envelope
     assert "success" not in data
+
+
+@pytest.mark.asyncio
+async def test_concurrent_signup_one_201_one_409(client: AsyncClient):
+    """Gate test: Simultaneous signups with identical email must result in exactly one 201 and one 409."""
+    payload = {
+        "email": "concurrent.race@example.com",
+        "password": "RacePassword123!",
+        "name": "Race Tester",
+        "accept_terms": True,
+    }
+    resp_a, resp_b = await asyncio.gather(
+        client.post("/api/auth/signup", json=payload),
+        client.post("/api/auth/signup", json=payload),
+    )
+    statuses = sorted([resp_a.status_code, resp_b.status_code])
+    assert statuses == [201, 409], f"Expected [201, 409] but got {statuses}"
 
 
 @pytest.mark.asyncio
@@ -192,6 +210,29 @@ async def test_refresh_token_rotation(client: AsyncClient):
     # The new token from reuse-detected family must also be revoked
     family_resp = await client.post("/api/auth/refresh", json={"refresh_token": new_tokens["refresh_token"]})
     assert family_resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_parallel_refresh_one_success_family_revoked_on_reuse(client: AsyncClient):
+    """Gate test: Simultaneous refresh with identical token must succeed at most once."""
+    signup_resp = await client.post(
+        "/api/auth/signup",
+        json={
+            "email": "parallel.refresh@example.com",
+            "password": "ParallelPassword123!",
+            "name": "Parallel Tester",
+            "accept_terms": True,
+        },
+    )
+    rf_token = signup_resp.json()["refresh_token"]
+
+    resp_a, resp_b = await asyncio.gather(
+        client.post("/api/auth/refresh", json={"refresh_token": rf_token}),
+        client.post("/api/auth/refresh", json={"refresh_token": rf_token}),
+    )
+    statuses = sorted([resp_a.status_code, resp_b.status_code])
+    # Exactly one succeeded (200) and the other detected reuse/revocation (401)
+    assert statuses == [200, 401], f"Expected [200, 401] but got {statuses}"
 
 
 # ---------------------------------------------------------------------------
