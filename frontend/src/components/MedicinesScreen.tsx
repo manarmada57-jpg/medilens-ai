@@ -19,7 +19,7 @@ import confetti from 'canvas-confetti';
 interface MedicinesScreenProps {
   profile: UserProfile;
   medications: Medication[];
-  refillAlert: RefillAlert;
+  refillAlert?: RefillAlert;
   onTakeMedication: (id: string) => void;
   onSnoozeMedication: (id: string) => void;
   onOpenAddModal: () => void;

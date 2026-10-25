@@ -24,7 +24,7 @@ import confetti from 'canvas-confetti';
 interface DesktopMedicinesScreenProps {
   profile: UserProfile;
   medications: Medication[];
-  refillAlert: RefillAlert;
+  refillAlert?: RefillAlert;
   onTakeMedication: (id: string) => void;
   onSnoozeMedication: (id: string) => void;
   onOpenAddModal: () => void;
@@ -298,9 +298,11 @@ export const DesktopMedicinesScreen: React.FC<DesktopMedicinesScreenProps> = ({
                   onSnooze={() => onSnoozeMedication(med.id)}
                   footerLeft={<span className="text-gray-500">Take at bedtime</span>}
                   footerRight={
-                    <span className="font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
-                      ⚠ {refillAlert.pillsLeft ?? 4} doses left
-                    </span>
+                    refillAlert ? (
+                      <span className="font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                        ⚠ {refillAlert.pillsLeft ?? 4} doses left
+                      </span>
+                    ) : undefined
                   }
                 />
               ))}
@@ -370,6 +372,7 @@ export const DesktopMedicinesScreen: React.FC<DesktopMedicinesScreenProps> = ({
           </div>
 
           {/* Refill Alert Card */}
+          {refillAlert && (
           <div className="rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 p-5 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-amber-800">
@@ -398,7 +401,7 @@ export const DesktopMedicinesScreen: React.FC<DesktopMedicinesScreenProps> = ({
                 <div className="h-full bg-amber-400 rounded-full" style={{ width: '18%' }} />
               </div>
               <p className="text-[11px] text-gray-500 pt-0.5">
-                📍 {refillAlert.pharmacy || 'CVS Pharmacy #4821'}
+                📍 {refillAlert.pharmacy || 'Your preferred pharmacy'}
               </p>
             </div>
 
@@ -409,6 +412,7 @@ export const DesktopMedicinesScreen: React.FC<DesktopMedicinesScreenProps> = ({
               <ChevronRight className="w-3.5 h-3.5" /> Order Refill Now
             </button>
           </div>
+          )}
 
           {/* Add Medicine Card */}
           <div className="bg-white rounded-2xl p-5 border-2 border-dashed border-[#a2e3de] shadow-sm text-center space-y-3 hover:border-[#0a7075] transition-colors group">
