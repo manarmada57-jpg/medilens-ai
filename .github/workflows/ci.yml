@@ -102,6 +102,11 @@ jobs:
         run: |
           npm run lint
 
+      - name: Static Data Audit
+        working-directory: frontend
+        run: |
+          npm run check:static
+
       - name: Build React PWA
         working-directory: frontend
         run: |

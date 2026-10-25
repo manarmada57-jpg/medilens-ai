@@ -142,7 +142,7 @@ export const DesktopLayout: React.FC<DesktopLayoutProps> = ({
             <span className="text-gray-400">Portal /</span>
             <span className="font-bold text-gray-800">{pageInfo.section}</span>
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-1" />
-            <span className="text-[11px] text-emerald-700 font-medium">HIPAA Encrypted</span>
+            <span className="text-[11px] text-emerald-700 font-medium">Encrypted Storage</span>
           </div>
         </div>
 
@@ -208,7 +208,7 @@ export const DesktopLayout: React.FC<DesktopLayoutProps> = ({
                 >
                   <div className="flex items-center gap-2">
                     <Pill className="w-4 h-4 text-[#1d4ed8]" />
-                    <span className="font-bold text-gray-900">Metformin 500mg • Afternoon dose</span>
+                    <span className="font-bold text-gray-900">Medicine reminder • Afternoon dose</span>
                   </div>
                   <span className="text-[10px] text-gray-400">Medication</span>
                 </button>
@@ -302,7 +302,7 @@ export const DesktopLayout: React.FC<DesktopLayoutProps> = ({
                 {initial}
               </div>
               <div className="text-left hidden lg:block">
-                <div className="text-xs font-bold text-gray-900 leading-tight">{firstName} Mitchell</div>
+                <div className="text-xs font-bold text-gray-900 leading-tight">{firstName}</div>
                 <div className="text-[10px] text-gray-400 leading-tight">Patient Verified</div>
               </div>
               <ChevronDown
@@ -375,12 +375,12 @@ export const DesktopLayout: React.FC<DesktopLayoutProps> = ({
               </div>
               <div className="overflow-hidden">
                 <div className="text-xs font-extrabold text-gray-900 truncate">
-                  {profile.name} Mitchell
+                  {profile.name}
                 </div>
-                <div className="text-[10px] text-gray-500 truncate">Age 68 • Female</div>
+                <div className="text-[10px] text-gray-500 truncate">Patient Account</div>
                 <div className="flex items-center gap-1 mt-0.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                  <span className="text-[10px] font-semibold text-emerald-700">Health Sync 87%</span>
+                  <span className="text-[10px] font-semibold text-emerald-700">Active</span>
                 </div>
               </div>
             </div>

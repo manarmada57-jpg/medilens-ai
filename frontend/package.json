@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "check:static": "bash scripts/check-no-static-data.sh src",
     "gen:api": "openapi-typescript ../backend/openapi.json -o src/api/schema.d.ts"
   },
   "dependencies": {

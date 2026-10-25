@@ -39,7 +39,8 @@ import {
 } from './api';
 
 export default function App() {
-  const [flowStep, setFlowStep] = useState<'login' | 'medical_history' | 'dashboard'>('dashboard');
+  // 'checking' prevents a flash of the login screen while we validate the stored token
+  const [flowStep, setFlowStep] = useState<'checking' | 'login' | 'medical_history' | 'dashboard'>('checking');
   const [currentTab, setCurrentTab] = useState<NavTab>('home');
   const [historySubTab, setHistorySubTab] = useState<'records' | 'selfcare'>('records');
   const [fontSize, setFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
@@ -97,16 +98,13 @@ export default function App() {
     document.documentElement.className = fontClass;
   }, [fontSize]);
 
-  // Initial Data Fetching from API
-  const loadUserData = async () => {
+  // Load all dashboard data from API
+  const loadUserData = async (): Promise<void> => {
     try {
       const token = tokenStorage.getAccessToken();
-      if (!token) {
-        // Not logged in; can switch to login if desired
-        return;
-      }
+      if (!token) return;
 
-      // Fetch user and profile summary
+      // Fetch user and profile summary in parallel; individual failures are tolerated
       const [user, summary, history, docsList, medsList, alerts] = await Promise.allSettled([
         authApi.getMe(),
         summaryApi.getSummary(),
@@ -156,13 +154,31 @@ export default function App() {
     }
   };
 
+  // Session restore: check token on mount, route to login if missing
   useEffect(() => {
-    loadUserData();
+    const token = tokenStorage.getAccessToken();
+    if (!token) {
+      setFlowStep('login');
+      return;
+    }
+    // Token present — load data, then decide which step to show
+    loadUserData().then(() => {
+      setFlowStep('dashboard');
+    });
+
     metaApi.getEmergencyMeta().then((meta) => {
       if (meta && meta.primary) {
         setEmergencyPhone(meta.primary);
       }
     }).catch(() => {});
+
+    // Listen for forced logout (e.g. token refresh failed mid-session)
+    const handleForcedLogout = () => {
+      tokenStorage.clear();
+      setFlowStep('login');
+    };
+    window.addEventListener('medilens:logout', handleForcedLogout);
+    return () => window.removeEventListener('medilens:logout', handleForcedLogout);
   }, []);
 
   // Accessibility font cycle
@@ -282,12 +298,25 @@ export default function App() {
     setCurrentTab('upload');
   };
 
+  // Step 0: Checking stored session — show nothing to avoid flash
+  if (flowStep === 'checking') {
+    return (
+      <div className="min-h-screen bg-[#ebf7f6] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 rounded-full border-4 border-[#0a7075] border-t-transparent animate-spin" />
+          <p className="text-sm font-semibold text-[#0a7075]">Loading…</p>
+        </div>
+      </div>
+    );
+  }
+
   // Step 1: Login / Auth View
   if (flowStep === 'login') {
     return (
       <div className="min-h-screen">
         <AuthScreen
-          onSuccess={(email) => {
+          onSuccess={(user) => {
+            setProfile((prev) => ({ ...prev, name: user.name || prev.name }));
             loadUserData();
             setFlowStep('dashboard');
           }}
@@ -446,13 +475,7 @@ export default function App() {
           <DesktopMedicinesScreen
             profile={profile}
             medications={medications}
-            refillAlert={refillAlerts[0] || {
-              id: 'refill-default',
-              medicationName: medications[0]?.name || 'Daily Medication',
-              pillsLeft: 4,
-              daysRemaining: 4,
-              pharmacy: 'Preferred Pharmacy',
-            }}
+            refillAlert={refillAlerts[0]}
             onTakeMedication={handleTakeMedication}
             onSnoozeMedication={handleSnoozeMedication}
             onOpenAddModal={() => setShowAddMedicineModal(true)}
@@ -578,18 +601,11 @@ export default function App() {
       )}
 
       {/* 3. Pharmacy Refill Modal */}
-      {showPharmacyModal && (
+      {showPharmacyModal && refillAlerts[0] && (
         <PharmacyModal
-          refill={refillAlerts[0] || {
-            id: 'refill-default',
-            medicationName: medications[0]?.name || 'Prescribed Medication',
-            pillsLeft: 3,
-            daysRemaining: 4,
-            pharmacy: 'Preferred Pharmacy',
-          }}
+          refill={refillAlerts[0]}
           onClose={() => setShowPharmacyModal(false)}
           onMarkRefilled={(medName) => {
-            // Update pills left in medication schedule
             setMedications((prev) =>
               prev.map((m) =>
                 m.name.includes(medName) ? { ...m, pillsLeft: 30 } : m

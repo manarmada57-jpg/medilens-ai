@@ -140,7 +140,7 @@ export const DesktopHistoryScreen: React.FC<DesktopHistoryScreenProps> = ({
                   {profile.name.charAt(0)}
                 </div>
                 <div>
-                  <h3 className="text-sm font-extrabold text-gray-900">{profile.name} Mitchell</h3>
+                  <h3 className="text-sm font-extrabold text-gray-900">{profile.name}</h3>
                   <p className="text-[11px] text-gray-500">
                     DOB: {effectiveDob} • Sex: {effectiveSex}
                   </p>

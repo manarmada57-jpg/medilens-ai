@@ -109,7 +109,7 @@ export const DesktopHomeScreen: React.FC<DesktopHomeScreenProps> = ({
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/20 text-xs font-medium text-white/90 border border-white/15">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" />
-                <span>HIPAA 256-Bit Encrypted</span>
+                <span>Field-Level Encrypted Storage</span>
               </div>
 
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/20 text-xs font-medium text-white/90 border border-white/15">
@@ -353,7 +353,7 @@ export const DesktopHomeScreen: React.FC<DesktopHomeScreenProps> = ({
                 {nextMedicine.name}
               </h3>
               <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                {nextMedicine.instructions} • {nextMedicine.loggedBy || 'Prescribed by Dr. Watson, MD'}
+                {nextMedicine.instructions} • {nextMedicine.loggedBy || 'As prescribed'}
               </p>
             </div>
 

@@ -261,7 +261,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             {nextMedicine.name}
           </h3>
           <p className="text-xs text-gray-500 mt-0.5">
-            {nextMedicine.instructions} • {nextMedicine.loggedBy || 'Prescribed by Dr. Watson'}
+            {nextMedicine.instructions} • {nextMedicine.loggedBy || 'As prescribed'}
           </p>
         </div>
 

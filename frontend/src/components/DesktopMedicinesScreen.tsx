@@ -308,14 +308,14 @@ export const DesktopMedicinesScreen: React.FC<DesktopMedicinesScreenProps> = ({
           )}
 
           {/* Interaction Check Badge */}
-          <div className="flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200">
-            <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+          <div className="flex items-center gap-3 p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-slate-50 border border-blue-200">
+            <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-xs font-bold text-gray-900">No Drug Interactions Detected</p>
+              <p className="text-xs font-bold text-gray-900">Talk to your doctor or pharmacist</p>
               <p className="text-[11px] text-gray-600 mt-0.5 leading-snug">
-                Lisinopril 10mg, Metformin 500mg &amp; Atorvastatin 20mg are safe to take together per your current regimen.
+                Drug interactions depend on your full health picture. Always check with your healthcare provider before combining medicines.
               </p>
             </div>
           </div>
@@ -385,7 +385,7 @@ export const DesktopMedicinesScreen: React.FC<DesktopMedicinesScreenProps> = ({
               <div className="flex items-center gap-1.5">
                 <Pill className="w-3.5 h-3.5 text-amber-600" />
                 <span className="text-xs font-extrabold text-gray-900">
-                  {refillAlert.medicationName || 'Atorvastatin 20mg'}
+                  {refillAlert.medicationName || 'Medication'}
                 </span>
               </div>
               <div className="flex items-center justify-between">

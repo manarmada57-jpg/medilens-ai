@@ -246,7 +246,7 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
               Personalized Self-Care Guide Ready
             </h3>
             <p className="text-xs text-[#d5f4f1] leading-relaxed">
-              Based on Dr. Rao's consultation note & your health profile, MediLens AI prepared your <strong>Migraine without aura</strong> self-care protocol.
+              Based on your health profile, MediLens AI has prepared your <strong>personalized self-care</strong> protocol.
             </p>
             <button
               onClick={() => setSubTab('selfcare')}
