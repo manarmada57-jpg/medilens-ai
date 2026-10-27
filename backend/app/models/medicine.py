@@ -83,12 +83,12 @@ class Dose(BaseModel):
     date: str  # YYYY-MM-DD
     timeSlot: Literal["MORNING", "AFTERNOON", "EVENING", "NIGHT"]
     timeDisplay: str  # "8:00 AM"
-    status: Literal["pending", "taken", "snoozed", "skipped", "missed"]
+    status: Literal["pending", "taken", "snoozed", "skipped", "missed"] = "pending"
     takenAt: str | None = None
     snoozedUntil: str | None = None
     loggedBy: str | None = None
     dueStatus: str
-    dueStatusType: Literal["normal", "due-soon", "taken", "upcoming", "missed"]
+    dueStatusType: Literal["normal", "due-soon", "taken", "upcoming", "missed"] = "normal"
 
 
 class DoseScheduleResponse(BaseModel):

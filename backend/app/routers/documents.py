@@ -5,7 +5,7 @@ Fully compliant with Part B & Part C specifications.
 
 import hashlib
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile, status
@@ -42,7 +42,7 @@ analyze_router = APIRouter(prefix="/api/analyze", tags=["Documents & Lab Analysi
 
 
 def _standard_pipeline_steps(is_done: bool = True) -> list[PipelineStep]:
-    st = "done" if is_done else "active"
+    st: Literal["done", "active", "pending"] = "done" if is_done else "active"
     return [
         PipelineStep(id=1, title="Upload & Security", description="File processed and metadata removed", status=st, tag="Processed"),
         PipelineStep(id=2, title="Text & OCR Extraction", description="Extracted report text with optical recognition", status=st),
@@ -275,6 +275,10 @@ async def analyze_document(
     db = get_database()
     user_id = current_user["id"]
     effective_kind = (kind or doc_type or "lab").lower()
+    # Clamp to known document types
+    if effective_kind not in ("lab", "prescription", "imaging", "note"):
+        effective_kind = "lab"
+    typed_kind: Literal["lab", "prescription", "imaging", "note"] = effective_kind  # type: ignore[assignment]
 
     # Read and validate size
     file_bytes = await file.read()
@@ -449,7 +453,7 @@ async def analyze_document(
         badgeText=doc_record["badgeText"],
         badgeType=doc_record["badgeType"],
         questionsCount=2,
-        type=effective_kind,
+        type=typed_kind,
         status="done",
         progress=100,
         pipelineSteps=_standard_pipeline_steps(True),

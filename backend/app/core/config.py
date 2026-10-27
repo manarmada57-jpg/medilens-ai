@@ -5,7 +5,7 @@ Pydantic v2 Settings for MediLens AI Backend.
 
 
 from cryptography.fernet import Fernet
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # Application Information
     APP_NAME: str = "MediLens AI Backend"
     APP_VERSION: str = "0.1.0"
-    APP_ENV: str = "development"  # development, staging, production, testing
+    APP_ENV: str = Field("development", validation_alias=AliasChoices("APP_ENV", "ENVIRONMENT"))
     DEBUG: bool = False
     HOST: str = "0.0.0.0"
     PORT: int = 8000
@@ -50,8 +50,8 @@ class Settings(BaseSettings):
         ]
 
     # Database (MongoDB)
-    MONGODB_URI: str = "mongodb://localhost:27017"
-    MONGODB_DB_NAME: str = "medilens_db"
+    MONGODB_URI: str = Field("mongodb://localhost:27017", validation_alias=AliasChoices("MONGODB_URI", "MONGO_URI"))
+    MONGODB_DB_NAME: str = Field("medilens_db", validation_alias=AliasChoices("MONGODB_DB_NAME", "MONGO_DB"))
     MONGODB_MIN_POOL_SIZE: int = 5
     MONGODB_MAX_POOL_SIZE: int = 50
     MONGODB_TIMEOUT_MS: int = 5000
@@ -66,7 +66,10 @@ class Settings(BaseSettings):
 
     # Field-level encryption — supports comma-separated key rotation (newest first)
     # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-    FIELD_ENCRYPTION_KEYS: str = ""  # comma-separated, newest first
+    FIELD_ENCRYPTION_KEYS: str = Field(
+        "",
+        validation_alias=AliasChoices("FIELD_ENCRYPTION_KEYS", "PROFILE_ENCRYPTION_KEY"),
+    )
 
     # Storage & Uploads
     UPLOAD_DIR: str = "/tmp/medilens/uploads"
@@ -112,7 +115,7 @@ class Settings(BaseSettings):
         return [str(v).strip() for v in value if str(v).strip()]
 
     # AI / LLM Providers
-    LLM_PROVIDER: str = "gemini"
+    LLM_PROVIDER: str = Field("gemini", validation_alias=AliasChoices("LLM_PROVIDER", "AI_PROVIDER"))
     GEMINI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
     OPENAI_API_KEY: str = ""

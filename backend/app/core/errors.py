@@ -56,7 +56,7 @@ class UnreadableDocumentException(MediLensException):
         super().__init__(
             message=message,
             code="UNREADABLE_DOCUMENT",
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             details=details,
         )
 
