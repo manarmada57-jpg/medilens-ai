@@ -38,27 +38,10 @@ services:
       retries: 3
       start_period: 10s
 
-  worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: medilens_worker
-    restart: unless-stopped
-    env_file: .env
-    command: ["python", "-m", "app.worker"]
-    depends_on:
-      mongodb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - medilens_network
-
   mongodb:
     image: mongo:7.0
     container_name: medilens_mongodb
     restart: unless-stopped
-    env_file: .env
     environment:
       - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER:-medilens_admin}
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD:-change_this_secure_mongo_password_in_prod}

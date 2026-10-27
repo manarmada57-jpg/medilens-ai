@@ -160,7 +160,7 @@ export const DesktopHistoryScreen: React.FC<DesktopHistoryScreenProps> = ({
             <div className="flex items-center gap-2 bg-[#f0fdf4] border border-[#bbf7d0] px-3 py-2 rounded-xl text-xs text-[#166534]">
               <ShieldCheck className="w-4 h-4 text-[#16a34a] shrink-0" />
               <div className="text-[11px] leading-tight">
-                <span className="font-bold">Clinical Intake Verified</span>
+                <span className="font-bold">Clinical Intake Completed</span>
                 <span className="block text-gray-500 font-normal">Synced with patient records</span>
               </div>
             </div>

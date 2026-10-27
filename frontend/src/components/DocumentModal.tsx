@@ -17,7 +17,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { HealthDocument, Source } from '../types';
-import { documentsApi } from '../api';
+import { documentsApi, ApiError } from '../api';
 
 interface DocumentModalProps {
   document: HealthDocument | null;
@@ -32,6 +32,7 @@ export const DocumentModal: React.FC<DocumentModalProps> = ({
 }) => {
   const [copiedQuestionIndex, setCopiedQuestionIndex] = useState<number | null>(null);
   const [shareSuccess, setShareSuccess] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
 
   // Ask question state
@@ -60,13 +61,18 @@ export const DocumentModal: React.FC<DocumentModalProps> = ({
 
   const handleShare = async () => {
     setSharing(true);
+    setShareError(null);
     try {
       await documentsApi.shareDocument(document.id);
       setShareSuccess(true);
       setTimeout(() => setShareSuccess(false), 2500);
-    } catch {
-      setShareSuccess(true);
-      setTimeout(() => setShareSuccess(false), 2500);
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setShareError(err.message);
+      } else {
+        setShareError('Sharing failed');
+      }
+      setTimeout(() => setShareError(null), 3500);
     } finally {
       setSharing(false);
     }
@@ -156,6 +162,11 @@ export const DocumentModal: React.FC<DocumentModalProps> = ({
                 <>
                   <Check className="w-3.5 h-3.5 text-green-600" />
                   <span className="text-green-600 font-bold">Shared with Caregiver</span>
+                </>
+              ) : shareError ? (
+                <>
+                  <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                  <span className="text-rose-600 font-bold">{shareError}</span>
                 </>
               ) : (
                 <>

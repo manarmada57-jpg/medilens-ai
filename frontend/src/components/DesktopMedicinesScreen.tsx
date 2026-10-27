@@ -166,7 +166,7 @@ export const DesktopMedicinesScreen: React.FC<DesktopMedicinesScreenProps> = ({
           <div className="flex items-center justify-between bg-white rounded-2xl px-4 py-3 border border-[#d8ecea] shadow-sm">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-[#0a7075]" />
-              <span className="text-xs font-bold text-gray-700">October 2026</span>
+              <span className="text-xs font-bold text-gray-700">{new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}</span>
             </div>
             <div className="flex gap-1.5">
               {[
@@ -201,7 +201,7 @@ export const DesktopMedicinesScreen: React.FC<DesktopMedicinesScreenProps> = ({
           {/* Morning Doses */}
           <MedSection
             title="Morning Doses"
-            time="8:00 AM"
+            time={morningMeds[0]?.timeDisplay || 'Morning'}
             icon={<Sun className="w-4 h-4 stroke-[2.5]" />}
             iconBg="bg-amber-100 text-amber-500"
             badge={
@@ -238,7 +238,7 @@ export const DesktopMedicinesScreen: React.FC<DesktopMedicinesScreenProps> = ({
           {/* Afternoon Doses */}
           <MedSection
             title="Afternoon Doses"
-            time="1:00 PM"
+            time={afternoonMeds[0]?.timeDisplay || 'Afternoon'}
             icon={<Clock className="w-4 h-4 stroke-[2.5]" />}
             iconBg="bg-blue-100 text-blue-600"
             badge={
@@ -278,7 +278,7 @@ export const DesktopMedicinesScreen: React.FC<DesktopMedicinesScreenProps> = ({
           {eveningMeds.length > 0 && (
             <MedSection
               title="Evening Doses"
-              time="8:00 PM"
+              time={eveningMeds[0]?.timeDisplay || 'Evening'}
               icon={<Moon className="w-4 h-4 stroke-[2.5]" />}
               iconBg="bg-purple-100 text-purple-600"
               badge={
@@ -470,7 +470,7 @@ export const DesktopMedicinesScreen: React.FC<DesktopMedicinesScreenProps> = ({
             <div>
               <p className="text-xs font-bold text-gray-900">Hydration Reminder</p>
               <p className="text-[11px] text-gray-600 mt-0.5 leading-relaxed">
-                Take Metformin mid-meal to reduce stomach discomfort. Avoid grapefruit while on Atorvastatin.
+                Drink a full glass of water with each scheduled medication dose, unless fluid-restricted by your doctor.
               </p>
             </div>
           </div>

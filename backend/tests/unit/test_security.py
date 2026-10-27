@@ -3,6 +3,7 @@ Unit Tests for Cryptography, Argon2, JWT, and Field-Level Encryption.
 """
 
 from datetime import timedelta
+
 import pytest
 from cryptography.fernet import Fernet
 

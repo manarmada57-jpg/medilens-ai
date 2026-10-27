@@ -3,7 +3,6 @@ Core Application Configuration
 Pydantic v2 Settings for MediLens AI Backend.
 """
 
-from typing import Any
 
 from cryptography.fernet import Fernet
 from pydantic import Field, field_validator, model_validator
@@ -147,11 +146,11 @@ class Settings(BaseSettings):
                 key = raw_key.strip()
                 try:
                     Fernet(key.encode())
-                except Exception:
+                except Exception as err:
                     raise ValueError(
                         "FIELD_ENCRYPTION_KEYS contains an invalid Fernet key. "
                         "Each key must be a 44-character URL-safe base64 Fernet key."
-                    )
+                    ) from err
 
         elif env == "development":
             # Auto-generate ephemeral dev secrets if not set

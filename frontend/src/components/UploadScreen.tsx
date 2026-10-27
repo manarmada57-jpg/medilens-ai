@@ -81,47 +81,19 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
 
     try {
       if (selectedMode === 'image') {
-        setProgress(45);
         const skinResult = await skinApi.analyzeSkin(file);
-        setProgress(100);
         setPipelineSteps((steps) => steps.map((s) => ({ ...s, status: 'done', tag: 'Done' })));
         if (onViewSkinResult) {
           onViewSkinResult(skinResult);
         } else {
-          // Fallback if skin viewer not mounted
-          alert(`Image analyzed: ${skinResult.observedSigns.join(', ')}`);
           onBack();
         }
         return;
       }
 
-      // Progress animation steps while awaiting real API response
-      const timer1 = setTimeout(() => {
-        setProgress(45);
-        setPipelineSteps((steps) => [
-          { ...steps[0], status: 'done', tag: 'Done' },
-          { ...steps[1], status: 'active', tag: 'Active' },
-          ...steps.slice(2),
-        ]);
-      }, 700);
-
-      const timer2 = setTimeout(() => {
-        setProgress(75);
-        setPipelineSteps((steps) => [
-          { ...steps[0], status: 'done' },
-          { ...steps[1], status: 'done' },
-          { ...steps[2], status: 'done' },
-          { ...steps[3], status: 'active', tag: 'Active' },
-          steps[4],
-        ]);
-      }, 1500);
-
       const result = await documentsApi.analyzeDocument(file, {
         kind: selectedMode === 'prescription' ? 'prescription' : 'report',
       });
-
-      clearTimeout(timer1);
-      clearTimeout(timer2);
 
       const completedDoc = result as HealthDocument;
       setProgress(100);
@@ -131,10 +103,7 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
       if (completedDoc.unclearItems && completedDoc.unclearItems.length > 0) {
         setUnclearItems(completedDoc.unclearItems);
       } else {
-        // Open directly if clean
-        setTimeout(() => {
-          onViewCompletedDocument(completedDoc);
-        }, 500);
+        onViewCompletedDocument(completedDoc);
       }
     } catch (err: unknown) {
       if (err instanceof ApiError) {

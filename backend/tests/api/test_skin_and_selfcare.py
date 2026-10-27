@@ -31,13 +31,10 @@ async def test_skin_screening_awareness(client: AsyncClient, auth_headers: dict[
     files = {"file": ("skin_spot.png", file_obj, "image/png")}
 
     response = await client.post("/api/analyze/skin", headers=auth_headers, files=files)
-    assert response.status_code == 200
+    assert response.status_code == 503
     data = response.json()
-    assert "abcdeGuide" in data
-    assert len(data["abcdeGuide"]) == 5
-    assert "questionsForDermatologist" in data
-    assert "disclaimer" in data
-    assert "NOT a medical diagnosis" in data["disclaimer"]
+    assert data["code"] == "FEATURE_UNAVAILABLE"
+    assert "not available yet" in data["error"].lower()
 
 
 @pytest.mark.asyncio
@@ -48,7 +45,9 @@ async def test_self_care_guides(client: AsyncClient, auth_headers: dict[str, str
     diabetes_guide = d_resp.json()
     assert "Type 2 Diabetes" in diabetes_guide["condition"]
     assert len(diabetes_guide["dailyHabits"]) >= 2
-    assert "Metformin" in diabetes_guide["dailyHabits"][0]["description"]
+    assert "pending doctor review" in diabetes_guide["disclaimer"]
+    for habit in diabetes_guide["dailyHabits"]:
+        assert "Metformin" not in habit["description"]
 
     # Test Hypertension Guide
     h_resp = await client.get("/api/selfcare?condition=Hypertension", headers=auth_headers)
@@ -56,6 +55,9 @@ async def test_self_care_guides(client: AsyncClient, auth_headers: dict[str, str
     hypertension_guide = h_resp.json()
     assert "Hypertension" in hypertension_guide["condition"]
     assert len(hypertension_guide["whenToContactDoctor"]) >= 1
+    assert "pending doctor review" in hypertension_guide["disclaimer"]
+    for habit in hypertension_guide["dailyHabits"]:
+        assert "Lisinopril" not in habit["description"]
 
 
 @pytest.mark.asyncio

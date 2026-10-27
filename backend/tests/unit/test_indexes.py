@@ -4,6 +4,7 @@ Verifies that index creation failures abort application startup in non-test envi
 """
 
 from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from app.core.config import settings

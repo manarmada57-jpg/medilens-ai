@@ -45,32 +45,10 @@ services:
           cpus: '2.0'
           memory: 2G
 
-  worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: medilens_worker_prod
-    restart: always
-    env_file: .env.production
-    command: ["python", "-m", "app.worker"]
-    depends_on:
-      mongodb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - medilens_network_prod
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 2G
-
   mongodb:
     image: mongo:7.0
     container_name: medilens_mongodb_prod
     restart: always
-    env_file: .env.production
     environment:
       - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USER}
       - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}

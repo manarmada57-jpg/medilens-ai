@@ -5,6 +5,7 @@ duplicate → 409, accept_terms required, name required, new endpoints.
 """
 
 import asyncio
+
 import pytest
 from httpx import AsyncClient
 
@@ -47,6 +48,25 @@ async def test_signup_success(client: AsyncClient):
     assert data["user"]["email"] == VALID_SIGNUP["email"]
     assert data["user"]["name"] == VALID_SIGNUP["name"]
     assert "id" in data["user"]
+
+
+@pytest.mark.asyncio
+async def test_signup_camelcase_contract(client: AsyncClient):
+    """Stage A contract test: posts exactly {name,email,password,timezone,language,acceptTerms}."""
+    payload = {
+        "name": "Aarav Sharma",
+        "email": "aarav.sharma.stage_a@example.com",
+        "password": "SecurePassword123!",
+        "timezone": "Asia/Kolkata",
+        "language": "hi",
+        "acceptTerms": True,
+    }
+    resp = await client.post("/api/auth/signup", json=payload)
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    assert data["user"]["timezone"] == "Asia/Kolkata"
+    assert data["user"]["language"] == "hi"
+    assert "fontSize" in data["user"]
 
 
 @pytest.mark.asyncio

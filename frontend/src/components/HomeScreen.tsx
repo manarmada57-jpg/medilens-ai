@@ -252,7 +252,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
           <div className="inline-flex items-center gap-1 rounded-full bg-[#fef3c7] px-2.5 py-0.5 text-[11px] font-semibold text-[#92400e] border border-[#fde68a]">
             <span className="w-1.5 h-1.5 rounded-full bg-[#d97706]"></span>
-            <span>Today at 1:00 PM</span>
+            <span>Today • {nextMedicine.timeDisplay || 'Scheduled Time'}</span>
           </div>
         </div>
 
@@ -277,7 +277,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             }`}
           >
             <Check className="w-4 h-4 stroke-[2.5]" />
-            <span>{nextMedicine.taken ? 'Taken at 1:02 PM' : 'Mark as Taken'}</span>
+            <span>{nextMedicine.taken ? 'Confirmed Taken ✓' : 'Mark as Taken'}</span>
           </button>
 
           <button

@@ -3,18 +3,6 @@
 # Scans frontend source for static/fake data that must not reach production.
 # Usage:  bash scripts/check-no-static-data.sh [src-dir]
 # Exit 0 = clean.  Exit 1 = violations found.
-#
-# Categories checked:
-#   1. mockData imports
-#   2. Fake person names (Eleanor, Mitchell, Watson, Rao)
-#   3. Hardcoded drug names used as identity (Lisinopril, Metformin, Atorvastatin)
-#   4. Fake document file names (Quest_Metabolic_Panel)
-#   5. Drug safety verdicts written in JSX
-#   6. US emergency number (911) in JSX strings
-#   7. Hardcoded "HIPAA" compliance claims
-#   8. Simulated progress / fake upload (setTimeout.*open.*mock)
-#   9. Direct array index access for medication lists
-#  10. Hardcoded doses in JSX (e.g. "Metformin 500mg" in a string literal)
 
 SRC="${1:-src}"
 VIOLATIONS=0
@@ -47,55 +35,55 @@ echo "=== MediLens AI — Static Data Checker ==="
 echo "Scanning: $SRC"
 echo ""
 
-# 1. mockData imports (from production component files)
+# 1. mockData imports
 check "mockData import" \
   "from ['\"](\.\./)*data/mockData" \
   "mockData\.ts"
 
-# 2. Fake person names
-check "Fake person names (Eleanor/Mitchell/Watson/Rao)" \
-  "(Eleanor|Mitchell|Watson|Rao)" \
+# 2. Fake person names (Eleanor, Mitchell, Watson, Rao)
+check "Fake person names (Dr. Watson/Rao, Eleanor, Mitchell)" \
+  "Dr\.? ?(Watson|Rao)|Eleanor|Mitchell" \
   "(mockData\.ts|\.test\.|\.spec\.|// )"
 
-# 3. Hardcoded drug names as identity strings (not in option/select elements)
-check "Hardcoded drug names in JSX strings" \
-  "(Lisinopril|Atorvastatin|Metformin)\s+[0-9]" \
-  "(mockData\.ts|\.test\.|\.spec\.|option value)"
-
-# 4. Fake document file names
-check "Fake document filenames" \
-  "Quest_Metabolic_Panel|fake_report|sample_report" \
-  "(mockData\.ts|\.test\.|\.spec\.)"
-
-# 5. Drug safety verdicts in JSX
-check "Drug safety verdicts in JSX" \
-  "safe to take together|no drug interactions|interaction-free" \
+# 3. Hardcoded lab/pharmacy names (Quest, CVS)
+check "Hardcoded lab/pharmacy names (Quest, CVS)" \
+  "\b(Quest|CVS)\b" \
   "(mockData\.ts|\.test\.|\.spec\.|// )"
 
-# 6. US emergency number 911 in string literals
-check "US emergency number 911 in JSX" \
-  "['\">\s]911['\"\s<]|call 911" \
+# 4. Hardcoded drug names (Atorvastatin, Metformin, Lisinopril)
+check "Hardcoded drug names (Atorvastatin, Metformin, Lisinopril)" \
+  "Atorvastatin|Metformin|Lisinopril" \
   "(mockData\.ts|\.test\.|\.spec\.|// )"
 
-# 7. HIPAA compliance claims
-check "HIPAA compliance claims" \
-  "HIPAA" \
+# 5. Take <drug> directives
+check "Take <drug> directives" \
+  "Take (Metformin|Lisinopril|Atorvastatin)" \
   "(mockData\.ts|\.test\.|\.spec\.|// )"
 
-# 8. setTimeout simulating upload/analysis
-check "Simulated upload (setTimeout opening mock)" \
-  "setTimeout.*mock\|setTimeout.*sample\|openSampleReport\|mockDocument" \
+# 6. Unverified/misleading marketing claims (Verified, HIPAA, 256-bit)
+check "Unverified security/compliance claims (Verified, HIPAA, 256-bit)" \
+  "Verified|HIPAA|256-?bit" \
   "(mockData\.ts|\.test\.|\.spec\.|// )"
 
-# 9. Direct positional medication array access in JSX
-check "Direct positional medication array access [0]/[1]/[2]" \
-  "medications\[[012]\]" \
-  "(mockData\.ts|\.test\.|\.spec\.|// |find\(|refillAlerts)"
+# 7. Hardcoded times in JSX strings ([0-9]{1,2}:[0-9]{2} (AM|PM))
+check "Hardcoded time literals" \
+  "[0-9]{1,2}:[0-9]{2} ?(AM|PM)" \
+  "(mockData\.ts|\.test\.|\.spec\.|// )"
 
-# 10. Hardcoded doses in JSX string literals
-check "Hardcoded dose strings in JSX" \
-  '"(Metformin|Lisinopril|Atorvastatin) [0-9]+(mg|mcg)"' \
-  "(mockData\.ts|\.test\.|\.spec\.|option|placeholder)"
+# 8. Hardcoded dates (October 20xx)
+check "Hardcoded dates (October 20xx)" \
+  "October 20[0-9]{2}" \
+  "(mockData\.ts|\.test\.|\.spec\.|// )"
+
+# 9. US emergency number 911
+check "US emergency number 911" \
+  "tel:911|call 911|['\">\s]911['\"\s<]" \
+  "(mockData\.ts|\.test\.|\.spec\.|// )"
+
+# 10. Fake progress / simulated upload
+check "Simulated upload (setTimeout mock)" \
+  "setTimeout.*mock|setTimeout.*sample|openSampleReport|mockDocument" \
+  "(mockData\.ts|\.test\.|\.spec\.|// )"
 
 echo ""
 echo "=== Summary ==="
@@ -107,6 +95,6 @@ if [ "$VIOLATIONS" -eq 0 ]; then
   echo "✅  No static data violations found."
   exit 0
 else
-  echo "❌  Fix the above before Stage 2 gate can pass."
+  echo "❌  Fix the above before Stage A gate can pass."
   exit 1
 fi

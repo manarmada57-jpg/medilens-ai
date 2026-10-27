@@ -45,6 +45,7 @@ export default function App() {
   const [historySubTab, setHistorySubTab] = useState<'records' | 'selfcare'>('records');
   const [fontSize, setFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
   const [medicalHistory, setMedicalHistory] = useState<MedicalHistory | null>(null);
+  const [saveHistoryError, setSaveHistoryError] = useState<string | null>(null);
 
   // Upload routing state
   const [uploadMode, setUploadMode] = useState<'report' | 'prescription' | 'image'>('report');
@@ -257,8 +258,10 @@ export default function App() {
     setMedicalHistory(data);
     try {
       await profileApi.saveMedicalHistory(data);
-    } catch {
-      // Saved locally
+      setSaveHistoryError(null);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to save medical history to server';
+      setSaveHistoryError(msg);
     }
 
     // Refresh user summary and medicine lists
@@ -522,6 +525,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen text-gray-900">
+      {saveHistoryError && (
+        <div className="bg-rose-50 border-b border-rose-200 text-rose-700 px-4 py-2.5 flex items-center justify-between text-sm z-50 sticky top-0">
+          <span>{saveHistoryError}</span>
+          <button onClick={() => setSaveHistoryError(null)} className="font-bold text-rose-500 hover:text-rose-800 ml-4">×</button>
+        </div>
+      )}
       {/* ── Desktop or Mobile Layout ── */}
       {activeDesktopMode ? (
         <DesktopLayout

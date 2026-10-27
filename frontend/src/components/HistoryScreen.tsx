@@ -93,7 +93,7 @@ export const HistoryScreen: React.FC<HistoryScreenProps> = ({
             User History & Records
           </h1>
           <p className="text-[11px] text-gray-500">
-            {profile.name} R. • Verified medical records & health intake
+            {profile.name} • Medical records & health intake
           </p>
         </div>
 

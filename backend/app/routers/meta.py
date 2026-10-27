@@ -4,22 +4,21 @@ and Document Sharing Router.
 Implements contracts from Part B & Part C.
 """
 
-from datetime import date, datetime, UTC
+from datetime import UTC, date, datetime
 from typing import Any, Literal
+
 from bson import ObjectId
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.core.deps import get_current_user
-from app.core.errors import NotFoundException, ValidationException
+from app.core.errors import NotFoundException
 from app.db.indexes import (
     DOCUMENTS_COLLECTION,
-    DOSE_LOGS_COLLECTION,
     MEDICINES_COLLECTION,
     PROFILES_COLLECTION,
     PUSH_SUBSCRIPTIONS_COLLECTION,
-    USERS_COLLECTION,
 )
 from app.db.mongo import get_database
 
@@ -120,7 +119,7 @@ async def get_app_config() -> ConfigResponse:
         maxVideoSeconds=30,
         docTypes=doc_types,
         mediaTypes=media_types,
-        aiAvailable=bool(settings.GEMINI_API_KEY or settings.ANTHROPIC_API_KEY or settings.OPENAI_API_KEY or True),
+        aiAvailable=bool(settings.GEMINI_API_KEY or settings.ANTHROPIC_API_KEY or settings.OPENAI_API_KEY),
     )
 
 

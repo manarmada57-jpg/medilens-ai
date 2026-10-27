@@ -109,7 +109,7 @@ export const DesktopLayout: React.FC<DesktopLayoutProps> = ({
       case 'medicines':
         return { section: 'Medication Regimen', subtitle: 'Adherence Tracking, Schedule & Pharmacy Refills' };
       case 'history':
-        return { section: 'Medical Profile & Records', subtitle: 'Verified Clinical Intake, Demographics & Reports' };
+        return { section: 'Medical Profile & Records', subtitle: 'Clinical Intake, Demographics & Reports' };
       case 'selfcare':
         return { section: 'AI Self-Care Guide', subtitle: 'Personalized Clinical Reference & Condition Management' };
     }
@@ -193,8 +193,8 @@ export const DesktopLayout: React.FC<DesktopLayoutProps> = ({
                   className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-[#f0faf9] text-left text-xs transition-colors"
                 >
                   <div className="flex items-center gap-2">
-                    <FileSpreadsheet className="w-4 h-4 text-[#0a7075]" />
-                    <span className="font-bold text-gray-900">Quest Metabolic Panel</span>
+                    <FileText className="w-4 h-4 text-[#0a7075]" />
+                    <span className="font-bold text-gray-900">Metabolic Panel</span>
                   </div>
                   <span className="text-[10px] text-gray-400">Lab Report</span>
                 </button>
@@ -262,9 +262,9 @@ export const DesktopLayout: React.FC<DesktopLayoutProps> = ({
                   </span>
                 </div>
                 <div className="mt-2.5 p-2.5 rounded-xl bg-amber-50/70 border border-amber-200/60">
-                  <div className="text-xs font-bold text-gray-900">Refill Reminder: Atorvastatin</div>
+                  <div className="text-xs font-bold text-gray-900">Refill Reminder: Active Medication</div>
                   <p className="text-[11px] text-amber-900 mt-0.5 leading-snug">
-                    Estimated 4 doses left. One-click refill ready with CVS Pharmacy.
+                    Estimated doses low. Refill ready with your preferred pharmacy.
                   </p>
                   <button
                     onClick={() => {
@@ -303,7 +303,7 @@ export const DesktopLayout: React.FC<DesktopLayoutProps> = ({
               </div>
               <div className="text-left hidden lg:block">
                 <div className="text-xs font-bold text-gray-900 leading-tight">{firstName}</div>
-                <div className="text-[10px] text-gray-400 leading-tight">Patient Verified</div>
+                <div className="text-[10px] text-gray-400 leading-tight">Patient Active</div>
               </div>
               <ChevronDown
                 className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${

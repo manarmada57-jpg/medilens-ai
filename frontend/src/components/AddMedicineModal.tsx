@@ -41,7 +41,7 @@ export const AddMedicineModal: React.FC<AddMedicineModalProps> = ({ onClose, onA
 
     const timeDisplay = exactTime
       ? new Date(`1970-01-01T${exactTime}:00`).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-      : timeSlot === 'MORNING' ? '8:00 AM' : timeSlot === 'AFTERNOON' ? '1:00 PM' : '8:00 PM';
+      : timeSlot.charAt(0) + timeSlot.slice(1).toLowerCase();
 
     const newMed: Medication = {
       id: `med-${Date.now()}`,
@@ -125,7 +125,7 @@ export const AddMedicineModal: React.FC<AddMedicineModalProps> = ({ onClose, onA
             <input
               type="text"
               required
-              placeholder="e.g. Metformin, Lisinopril, Amlodipine"
+              placeholder="e.g. Paracetamol, Amoxicillin, Cetirizine"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0a7075]"
@@ -174,10 +174,10 @@ export const AddMedicineModal: React.FC<AddMedicineModalProps> = ({ onClose, onA
                 onChange={(e) => handleTimeSlotChange(e.target.value as any)}
                 className="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0a7075] bg-white"
               >
-                <option value="MORNING">Morning (8:00 AM)</option>
-                <option value="AFTERNOON">Afternoon (1:00 PM)</option>
-                <option value="EVENING">Evening (8:00 PM)</option>
-                <option value="NIGHT">Night (10:00 PM)</option>
+                <option value="MORNING">Morning</option>
+                <option value="AFTERNOON">Afternoon</option>
+                <option value="EVENING">Evening</option>
+                <option value="NIGHT">Night</option>
               </select>
             </div>
             <div>

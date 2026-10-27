@@ -378,7 +378,7 @@ export const SelfCareScreen: React.FC<SelfCareScreenProps> = ({
                 <ul className="space-y-2.5 pt-1 text-xs text-gray-700">
                   <li className="flex items-start gap-2.5">
                     <CheckCircle2 className="w-4 h-4 text-[#0a7075] shrink-0 mt-0.5" />
-                    <span>Take prescribed medications (e.g. Metformin) with meals as directed.</span>
+                    <span>Take prescribed medications with meals as directed by your physician.</span>
                   </li>
                   <li className="flex items-start gap-2.5">
                     <CheckCircle2 className="w-4 h-4 text-[#0a7075] shrink-0 mt-0.5" />

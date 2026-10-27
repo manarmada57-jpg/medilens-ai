@@ -5,9 +5,9 @@ Fully compliant with Part B & Part C specifications.
 
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
+
 from bson import ObjectId
 from fastapi import APIRouter, Depends, Query, Response, status
-from fastapi.responses import JSONResponse
 
 from app.core.deps import get_current_user
 from app.core.errors import NotFoundException
@@ -24,7 +24,6 @@ from app.models.medicine import (
     DoseLogRequest,
     DoseScheduleResponse,
     MedicationCreateRequest,
-    MedicationResponse,
     MedicationUpdateRequest,
     RefillAlertResponse,
     SnoozeDoseRequest,
@@ -171,7 +170,7 @@ async def create_medication(
         "pillsLeft": doc["pills_left"],
         "pillsTotal": doc["pills_total"],
     }
-    return {"medicine": resp_data}
+    return {**resp_data, "medicine": resp_data}
 
 
 @router.post(
@@ -351,7 +350,7 @@ async def get_today_schedule(
                 due_status = "Confirmed taken"
                 due_type = "taken"
                 taken_at = existing_log.get("taken_at")
-                taken_at_str = taken_at.isoformat() if hasattr(taken_at, "isoformat") else str(taken_at)
+                taken_at_str = taken_at.isoformat() if taken_at and hasattr(taken_at, "isoformat") else (str(taken_at) if taken_at is not None else None)
             elif existing_log and existing_log.get("status") == "snoozed":
                 dose_status = "snoozed"
                 due_status = "Snoozed"

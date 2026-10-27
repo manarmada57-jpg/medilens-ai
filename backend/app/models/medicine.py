@@ -4,6 +4,7 @@ Strictly matches React TypeScript frontend contracts and Part C5.
 """
 
 from typing import Literal
+
 from pydantic import BaseModel, Field
 
 

@@ -4,6 +4,7 @@ Fully matches Part C3 DocumentDetail & DocumentListItem contracts.
 """
 
 from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -60,7 +61,7 @@ class HealthDocumentResponse(BaseModel):
     title: str
     date: str
     category: str = "Diagnostic Lab"
-    provider: str = "Diagnostic Center"
+    provider: str | None = None
     badgeText: str = "Explained"
     badgeType: Literal["warning", "active", "success", "info"] = "active"
     questionsCount: int = 0

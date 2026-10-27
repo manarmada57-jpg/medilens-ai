@@ -27,7 +27,7 @@ export const MedicalHistoryScreen: React.FC<MedicalHistoryScreenProps> = ({
 }) => {
   // Form states
   const [dob, setDob] = useState(initialData?.dob || '');
-  const [sex, setSex] = useState(initialData?.sex || '');
+  const [sex, setSex] = useState<MedicalHistory['sex'] | string>(initialData?.sex || '');
   const [conditions, setConditions] = useState<string[]>(
     initialData?.conditions ?? []
   );
@@ -118,7 +118,7 @@ export const MedicalHistoryScreen: React.FC<MedicalHistoryScreenProps> = ({
   const handleSubmit = () => {
     onSave({
       dob,
-      sex,
+      sex: (sex as MedicalHistory['sex']) || undefined,
       conditions,
       allergyType,
       noKnownAllergies,
@@ -407,7 +407,7 @@ export const MedicalHistoryScreen: React.FC<MedicalHistoryScreenProps> = ({
             <form onSubmit={handleAddMedicine} className="flex flex-col sm:flex-row gap-2 pt-1">
               <input
                 type="text"
-                placeholder="Medicine name (e.g., Metformin)"
+                placeholder="Medicine name (e.g., Paracetamol)"
                 value={medNameInput}
                 onChange={(e) => setMedNameInput(e.target.value)}
                 className="flex-1 px-3.5 py-2.5 rounded-xl border border-gray-200 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0a7075]"

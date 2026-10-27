@@ -6,6 +6,7 @@ Fully compliant with Part B & Part C specifications.
 import hashlib
 from datetime import UTC, datetime
 from typing import Any
+
 from bson import ObjectId
 from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile, status
 from fastapi.responses import JSONResponse
@@ -13,12 +14,17 @@ from fastapi.responses import JSONResponse
 from app.ai.llm_client import llm_client
 from app.core.config import settings
 from app.core.deps import get_current_user
-from app.core.errors import EmergencyDetectedException, NotFoundException, ValidationException
+from app.core.errors import (
+    EmergencyDetectedException,
+    FeatureUnavailableException,
+    NotFoundException,
+    UnreadableDocumentException,
+    ValidationException,
+)
 from app.db.indexes import DOCUMENTS_COLLECTION
 from app.db.mongo import get_database
 from app.models.document import (
     DocumentProgressResponse,
-    DocumentUploadAsyncResponse,
     ExtractedMedicine,
     FindingItem,
     HealthDocumentResponse,
@@ -38,11 +44,11 @@ analyze_router = APIRouter(prefix="/api/analyze", tags=["Documents & Lab Analysi
 def _standard_pipeline_steps(is_done: bool = True) -> list[PipelineStep]:
     st = "done" if is_done else "active"
     return [
-        PipelineStep(id=1, title="Upload & Security", description="Verified file signature & removed EXIF", status=st, tag="Encrypted"),
-        PipelineStep(id=2, title="Text & OCR Extraction", description="Extracted report text with high optical clarity", status=st),
-        PipelineStep(id=3, title="Safety & Guardrails", description="Passed prompt injection and emergency scanner", status=st),
+        PipelineStep(id=1, title="Upload & Security", description="File processed and metadata removed", status=st, tag="Processed"),
+        PipelineStep(id=2, title="Text & OCR Extraction", description="Extracted report text with optical recognition", status=st),
+        PipelineStep(id=3, title="Safety & Guardrails", description="Passed injection check and emergency scanner", status=st),
         PipelineStep(id=4, title="Biomarker Validation", description="Cross-checked against printed report ranges", status=st),
-        PipelineStep(id=5, title="Grounded Plain Translation", description="Translated to simple words with MedlinePlus citations", status=st),
+        PipelineStep(id=5, title="Grounded Plain Translation", description="Translated to simple words with citations", status=st),
     ]
 
 
@@ -289,9 +295,9 @@ async def analyze_document(
     else:
         extracted_text = ocr_service.extract_text_from_image(file_bytes)
 
-    # Step 2: Unreadable Content Check
+    # Step 2: Unreadable Content Check — if unreadable, store nothing and return 422
     if not extracted_text or not ocr_service.is_image_readable(extracted_text):
-        extracted_text = "Fasting Blood Sugar: 110 mg/dL (Reference Range: 70 - 99 mg/dL)"
+        raise UnreadableDocumentException("Please upload a clearer photo or PDF")
 
     # Step 3: Safety Guardrails
     if safety_engine.detect_prompt_injection(extracted_text):
@@ -301,94 +307,97 @@ async def analyze_document(
     if emergency_alert:
         raise EmergencyDetectedException(message=emergency_alert["action_required"])
 
-    # Step 4: Parse Biomarkers & Validate Printed Reference Ranges
-    findings: list[dict[str, Any]] = []
+    # Step 4: Ensure AI provider is configured for interpretation
+    if not (settings.GEMINI_API_KEY or settings.ANTHROPIC_API_KEY or settings.OPENAI_API_KEY):
+        raise FeatureUnavailableException("Document analysis is temporarily unavailable: no AI provider configured")
 
-    if any(k in extracted_text.lower() for k in ["glucose", "fbs", "sugar"]):
+    # Step 4: Parse Biomarkers & Validate Printed Reference Ranges dynamically
+    findings: list[dict[str, Any]] = []
+    unclear_items: list[str] = []
+
+    # Dynamic regex matching for recognized lab tests
+    import re
+    # Glucose / FBS
+    fbs_match = re.search(r"(?:fasting\s+blood\s+(?:sugar|glucose)|fbs)[:\s]+(\d+(?:\.\d+)?)\s*([a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
+    if fbs_match:
+        val = fbs_match.group(1)
+        unit = fbs_match.group(2) or "mg/dL"
+        remainder = extracted_text[fbs_match.end():fbs_match.end() + 80]
+        range_match = re.search(r"(?:ref(?:erence)?\s*range[:\s]*)?(\d+(?:\.\d+)?\s*[-–to]\s*\d+(?:\.\d+)?)", remainder, re.IGNORECASE)
+        ref_range = range_match.group(1) if range_match else "70 - 99 mg/dL"
+        status_eval = lab_validator.evaluate_status(val, ref_range)
         norm_name = lab_validator.normalize_test_name("Fasting Blood Sugar")
         rag_data = await medical_rag.get_grounded_explanation(norm_name)
-        status_eval = lab_validator.evaluate_status("110", "70 - 99")
-        sources = [
-            {
-                "name": "MedlinePlus",
-                "title": rag_data.get("source") or "Blood Glucose Test Overview",
-                "url": rag_data.get("source_url") or "https://medlineplus.gov/lab-tests/blood-glucose-test/",
-            }
-        ]
         findings.append(
             {
                 "testName": norm_name,
-                "value": "110",
-                "unit": "mg/dL",
-                "referenceRange": "70 - 99 mg/dL",
+                "value": val,
+                "unit": unit,
+                "referenceRange": ref_range,
                 "status": status_eval,
                 "critical": False,
                 "explanation": rag_data.get("plain_explanation", ""),
                 "whyItMatters": "Fasting blood sugar measures glucose regulation after an 8-hour fast.",
                 "needsReview": False,
-                "sources": sources,
+                "sources": [
+                    {
+                        "name": "MedlinePlus",
+                        "title": rag_data.get("source") or "Blood Glucose Test Overview",
+                        "url": rag_data.get("source_url") or "https://medlineplus.gov/lab-tests/blood-glucose-test/",
+                    }
+                ],
                 "sourceCitation": rag_data.get("source"),
                 "sourceUrl": rag_data.get("source_url"),
             }
         )
 
-    if "cholesterol" in extracted_text.lower():
+    # Cholesterol
+    chol_match = re.search(r"(?:total\s+cholesterol|cholesterol)[:\s]+(\d+(?:\.\d+)?)\s*([a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
+    if chol_match:
+        val = chol_match.group(1)
+        unit = chol_match.group(2) or "mg/dL"
+        remainder = extracted_text[chol_match.end():chol_match.end() + 80]
+        range_match = re.search(r"(?:ref(?:erence)?\s*range[:\s]*)?([<≤]\s*\d+(?:\.\d+)?|\d+\s*[-–to]\s*\d+)", remainder, re.IGNORECASE)
+        ref_range = range_match.group(1) if range_match else "< 200 mg/dL"
+        status_eval = lab_validator.evaluate_status(val, ref_range)
         norm_name = lab_validator.normalize_test_name("Total Cholesterol")
         rag_data = await medical_rag.get_grounded_explanation(norm_name)
-        sources = [
-            {
-                "name": "MedlinePlus",
-                "title": rag_data.get("source") or "Cholesterol Levels",
-                "url": rag_data.get("source_url") or "https://medlineplus.gov/cholesterol.html",
-            }
-        ]
         findings.append(
             {
                 "testName": norm_name,
-                "value": "195",
-                "unit": "mg/dL",
-                "referenceRange": "< 200 mg/dL",
-                "status": "normal",
+                "value": val,
+                "unit": unit,
+                "referenceRange": ref_range,
+                "status": status_eval,
                 "critical": False,
                 "explanation": rag_data.get("plain_explanation", ""),
                 "whyItMatters": "Total cholesterol quantifies overall lipid circulating in blood.",
                 "needsReview": False,
-                "sources": sources,
+                "sources": [
+                    {
+                        "name": "MedlinePlus",
+                        "title": rag_data.get("source") or "Cholesterol Levels",
+                        "url": rag_data.get("source_url") or "https://medlineplus.gov/cholesterol.html",
+                    }
+                ],
                 "sourceCitation": rag_data.get("source"),
                 "sourceUrl": rag_data.get("source_url"),
             }
         )
 
     if not findings:
-        norm_name = "Comprehensive Metabolic Biomarker"
-        rag_data = await medical_rag.get_grounded_explanation("Blood Glucose")
-        sources = [
-            {
-                "name": "MedlinePlus",
-                "title": "Understanding Lab Results",
-                "url": "https://medlineplus.gov/lab-tests/",
-            }
-        ]
-        findings.append(
-            {
-                "testName": norm_name,
-                "value": "Within Range",
-                "unit": "Clinical",
-                "referenceRange": "Standard",
-                "status": "normal",
-                "critical": False,
-                "explanation": "Reported values align with laboratory reference boundaries.",
-                "whyItMatters": "Indicates baseline metabolic stability.",
-                "needsReview": False,
-                "sources": sources,
-                "sourceCitation": rag_data.get("source"),
-                "sourceUrl": rag_data.get("source_url"),
-            }
-        )
+        unclear_items.append("No recognized lab tests or biomarker panels found in this document. Please ensure the document is a supported lab report.")
 
     # Step 5: Plain Language Explanation via LLM Client
     clean_title = filename.replace(".pdf", "").replace(".png", "").replace(".jpg", "").replace("_", " ").title()
-    plain_summary = await llm_client.explain_report(clean_title, findings)
+    plain_summary = await llm_client.explain_report(clean_title, findings) if findings else "No recognized biomarker findings could be extracted from this document."
+
+    doctor_questions: list[str] = []
+    if findings:
+        doctor_questions = [
+            f"What do my {findings[0]['testName']} results indicate for my overall health?",
+            "What lifestyle or dietary adjustments do you advise based on this panel?",
+        ]
 
     # Step 6: Persist Document Record
     now = datetime.now(UTC)
@@ -397,20 +406,17 @@ async def analyze_document(
         "title": clean_title,
         "date": now.strftime("%d %b %Y"),
         "category": "Diagnostic Lab" if effective_kind == "lab" else "Prescription",
-        "provider": "Verified Diagnostic Laboratory",
-        "badgeText": "Explained · Plain Words",
-        "badgeType": "success",
-        "questionsCount": 2,
+        "provider": None,
+        "badgeText": "Explained · Plain Words" if findings else "Needs Review",
+        "badgeType": "success" if findings else "warning",
+        "questionsCount": len(doctor_questions),
         "type": effective_kind,
-        "summary": "Document analyzed against MedlinePlus and WHO medical references.",
+        "summary": "Document analyzed against MedlinePlus and WHO medical references." if findings else "Document processed with zero recognized biomarkers.",
         "findings": findings,
         "plainLanguageSummary": plain_summary,
-        "doctorQuestions": [
-            "Do these findings suggest continuing my current regimen or scheduling a follow-up?",
-            "What lifestyle or dietary adjustments do you advise based on this panel?",
-        ],
+        "doctorQuestions": doctor_questions,
         "urgentFlags": [],
-        "unclearItems": [],
+        "unclearItems": unclear_items,
         "pipelineSteps": [s.model_dump() for s in _standard_pipeline_steps(True)],
         "sources": [
             {"name": "MedlinePlus", "title": "MedlinePlus Lab Tests", "url": "https://medlineplus.gov/lab-tests/"},

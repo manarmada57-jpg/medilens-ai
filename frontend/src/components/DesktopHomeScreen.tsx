@@ -102,7 +102,7 @@ export const DesktopHomeScreen: React.FC<DesktopHomeScreenProps> = ({
               Your health profile is up-to-date. You have{' '}
               <strong className="text-white font-bold">{profile.activeReportsCount} understood reports</strong> and{' '}
               <strong className="text-white font-bold">{profile.upcomingMedsCount} upcoming medication dose</strong>{' '}
-              scheduled today at 1:00 PM.
+              scheduled for today.
             </p>
 
             {/* Feature Pills */}
@@ -189,7 +189,7 @@ export const DesktopHomeScreen: React.FC<DesktopHomeScreenProps> = ({
             {nextMedicine.name}
           </div>
           <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-amber-700">
-            <span>Due at 1:00 PM (with meal)</span>
+            <span>Due at {nextMedicine.timeDisplay || 'Scheduled Time'} ({nextMedicine.instructions || 'as prescribed'})</span>
           </div>
         </div>
 
@@ -344,7 +344,7 @@ export const DesktopHomeScreen: React.FC<DesktopHomeScreenProps> = ({
 
               <div className="inline-flex items-center gap-1 rounded-full bg-[#fef3c7] px-2.5 py-1 text-[11px] font-semibold text-[#92400e] border border-[#fde68a]">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#d97706] animate-pulse"></span>
-                <span>Today at 1:00 PM</span>
+                <span>Today • {nextMedicine.timeDisplay || 'Scheduled Time'}</span>
               </div>
             </div>
 
@@ -369,7 +369,7 @@ export const DesktopHomeScreen: React.FC<DesktopHomeScreenProps> = ({
                 }`}
               >
                 <Check className="w-4 h-4 stroke-[2.5]" />
-                <span>{nextMedicine.taken ? 'Taken at 1:02 PM ✓' : 'Mark as Taken'}</span>
+                <span>{nextMedicine.taken ? 'Confirmed Taken ✓' : 'Mark as Taken'}</span>
               </button>
 
               <button
@@ -392,7 +392,7 @@ export const DesktopHomeScreen: React.FC<DesktopHomeScreenProps> = ({
                 </h3>
               </div>
               <span className="text-[10px] font-bold bg-[#daf1ef] text-[#0a7075] px-2 py-0.5 rounded-full">
-                Quest Metabolic
+                Recent Panel
               </span>
             </div>
 
@@ -407,7 +407,7 @@ export const DesktopHomeScreen: React.FC<DesktopHomeScreenProps> = ({
               <div className="p-2.5 bg-white rounded-xl border border-[#d8ecea] flex items-start gap-2">
                 <span className="font-bold text-[#0a7075]">2.</span>
                 <p className="leading-snug">
-                  "Since I take Lisinopril, should I continue monitoring potassium in my diet?"
+                  "Should I continue monitoring key electrolyte levels in my diet?"
                 </p>
               </div>
             </div>

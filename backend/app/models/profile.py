@@ -48,8 +48,8 @@ class MedicalHistorySchema(BaseModel):
             return None
         try:
             parsed = date.fromisoformat(str(v))
-        except ValueError:
-            raise ValueError("dob must be a valid ISO date (YYYY-MM-DD)")
+        except ValueError as err:
+            raise ValueError("dob must be a valid ISO date (YYYY-MM-DD)") from err
         if parsed > date.today():
             raise ValueError("Date of birth cannot be in the future")
         return str(v)

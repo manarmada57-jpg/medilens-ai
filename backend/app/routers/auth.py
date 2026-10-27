@@ -91,6 +91,9 @@ def _build_token_response(
     user_id: str,
     name: str,
     email: str,
+    timezone: str = "Asia/Kolkata",
+    language: str = "en",
+    font_size: str = "normal",
 ) -> TokenResponse:
     return TokenResponse(
         token=access_token,
@@ -98,7 +101,14 @@ def _build_token_response(
         refresh_token=refresh_token,
         token_type="bearer",
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        user=UserInfo(id=user_id, name=name, email=email),
+        user=UserInfo(
+            id=user_id,
+            name=name,
+            email=email,
+            timezone=timezone,
+            language=language,
+            font_size=font_size,
+        ),
     )
 
 
@@ -125,13 +135,25 @@ async def signup(req: UserSignupRequest, request: Request) -> TokenResponse:
     hashed = hash_password(req.password)
     now = datetime.now(UTC)
 
+    # Check duplicate email explicitly for in-memory mock and concurrent guarantees
+    existing = await db[USERS_COLLECTION].find_one({"email": email_clean})
+    if existing:
+        raise MediLensException(
+            message="An account with this email address already exists",
+            code="EMAIL_EXISTS",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+    user_tz = req.timezone or "Asia/Kolkata"
+    user_lang = req.language or "en"
+
     user_doc: dict[str, Any] = {
         "email": email_clean,
         "name": name_clean,
         "hashed_password": hashed,
         "is_active": True,
-        "timezone": "Asia/Kolkata",
-        "language": "en",
+        "timezone": user_tz,
+        "language": user_lang,
         "font_size": "normal",
         "consent": {"terms_at": now, "privacy_at": now},
         "created_at": now,
@@ -140,12 +162,12 @@ async def signup(req: UserSignupRequest, request: Request) -> TokenResponse:
 
     try:
         result = await db[USERS_COLLECTION].insert_one(user_doc)
-    except pymongo.errors.DuplicateKeyError:
+    except pymongo.errors.DuplicateKeyError as err:
         raise MediLensException(
             message="An account with this email address already exists",
             code="EMAIL_EXISTS",
             status_code=status.HTTP_409_CONFLICT,
-        )
+        ) from err
 
     user_id = str(result.inserted_id)
 
@@ -190,7 +212,7 @@ async def signup(req: UserSignupRequest, request: Request) -> TokenResponse:
     await write_audit_log(db, user_id=user_id, action="signup", ip=_client_ip(request))
     logger.info("New user registered: [ID: %s]", user_id)
 
-    return _build_token_response(access_token, raw_refresh, user_id, name_clean, email_clean)
+    return _build_token_response(access_token, raw_refresh, user_id, name_clean, email_clean, user_tz, user_lang, "normal")
 
 
 # ---------------------------------------------------------------------------
@@ -249,7 +271,16 @@ async def login(req: UserLoginRequest, request: Request) -> TokenResponse:
     )
 
     await write_audit_log(db, user_id=user_id, action="login", ip=_client_ip(request))
-    return _build_token_response(access_token, raw_refresh, user_id, name, email_clean)
+    return _build_token_response(
+        access_token,
+        raw_refresh,
+        user_id,
+        name,
+        email_clean,
+        user.get("timezone", "Asia/Kolkata"),
+        user.get("language", "en"),
+        user.get("font_size", "normal"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -319,7 +350,16 @@ async def refresh_tokens(req: RefreshTokenRequest) -> TokenResponse:
         }
     )
 
-    return _build_token_response(new_access, new_raw, user_id, name, email)
+    return _build_token_response(
+        new_access,
+        new_raw,
+        user_id,
+        name,
+        email,
+        user.get("timezone", "Asia/Kolkata"),
+        user.get("language", "en"),
+        user.get("font_size", "normal"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -412,8 +452,8 @@ async def update_me(
         try:
             zoneinfo.ZoneInfo(req.timezone)
             updates["timezone"] = req.timezone
-        except (zoneinfo.ZoneInfoNotFoundError, KeyError):
-            raise ValidationException(f"Unknown timezone: {req.timezone}")
+        except (zoneinfo.ZoneInfoNotFoundError, KeyError) as err:
+            raise ValidationException(f"Unknown timezone: {req.timezone}") from err
     if req.language is not None:
         if req.language not in ("en", "hi"):
             raise ValidationException("language must be 'en' or 'hi'")

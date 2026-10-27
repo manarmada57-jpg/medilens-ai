@@ -79,7 +79,7 @@ async def get_profile(current_user: dict[str, Any] = Depends(get_current_user)) 
             user_id=user_id,
             as_json=True,
         )
-    except DecryptionError:
+    except DecryptionError as err:
         logger.error("Medical history decryption failed for user %s", user_id)
         raise MediLensException(
             message=(
@@ -88,7 +88,7 @@ async def get_profile(current_user: dict[str, Any] = Depends(get_current_user)) 
             ),
             code="DATA_UNREADABLE",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
+        ) from err
 
     if not isinstance(decrypted, dict):
         return JSONResponse(status_code=200, content={"profile": None})

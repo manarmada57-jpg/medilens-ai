@@ -135,7 +135,7 @@ export const PharmacyModal: React.FC<PharmacyModalProps> = ({
                 type="text"
                 value={pharmacyName}
                 onChange={(e) => setPharmacyName(e.target.value)}
-                placeholder="e.g. Apollo Pharmacy, CVS"
+                placeholder="e.g. Apollo Pharmacy, MedPlus"
                 className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-[#0a7075]"
                 required
               />

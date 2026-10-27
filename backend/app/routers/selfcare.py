@@ -7,8 +7,8 @@ Supports GDPR and India DPDP Act data export and right to be forgotten.
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Query, Response
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 
 from app.core.deps import get_current_user
 from app.core.security import field_encryptor
@@ -46,7 +46,7 @@ class SelfCareGuideResponse(BaseModel):
     whenToContactDoctor: list[str]
     emergencyFlags: list[str]
     disclaimer: str = (
-        "Educational guidance derived from WHO and NIH public health resources. "
+        "General lifestyle guidance (pending doctor review) derived from WHO, NIH, and MedlinePlus resources. "
         "Always follow your physician's personalized clinical directives."
     )
 
@@ -69,7 +69,7 @@ class SelfCareDetailResponse(BaseModel):
     redFlags: list[str]
     sources: list[SourceItem]
     disclaimer: str = (
-        "Educational guidance derived from WHO, NIH, and MedlinePlus public health resources. "
+        "General lifestyle guidance (pending doctor review) derived from WHO, NIH, and MedlinePlus resources. "
         "Never replaces a doctor's advice."
     )
 
@@ -93,7 +93,7 @@ SELFCARE_CATALOG: dict[str, dict[str, Any]] = {
         "daily_habits": [
             SelfCareHabitItem(
                 title="Consistent Meal Scheduling",
-                description="Space carbohydrates evenly throughout the day. Take Metformin mid-meal to reduce gastrointestinal discomfort.",
+                description="Space carbohydrates evenly throughout the day to support steady energy levels.",
                 frequency="Daily with meals",
                 category="nutrition",
                 citationSource="NIH / NIDDK Diabetes Guidelines",
@@ -130,7 +130,7 @@ SELFCARE_CATALOG: dict[str, dict[str, Any]] = {
                 "heading": "Daily Nutrition & Medication",
                 "items": [
                     "Space carbohydrates evenly across meals to avoid glucose spikes.",
-                    "Take doctor-prescribed Metformin with meals to minimize stomach upset.",
+                    "Discuss individualized nutritional strategies with your healthcare provider.",
                     "Hydrate primarily with water, avoiding sweetened fruit beverages.",
                 ],
             },
@@ -165,7 +165,7 @@ SELFCARE_CATALOG: dict[str, dict[str, Any]] = {
         "id": "hypertension",
         "condition": "Hypertension (High Blood Pressure)",
         "title": "Hypertension Management Guide",
-        "overview": "Blood pressure management focuses on sodium moderation, stress reduction, and taking medications like Lisinopril consistently.",
+        "overview": "Blood pressure management focuses on sodium moderation, stress reduction, and consistent daily wellness routines (pending doctor review).",
         "daily_habits": [
             SelfCareHabitItem(
                 title="Sodium Awareness",
@@ -213,7 +213,7 @@ SELFCARE_CATALOG: dict[str, dict[str, Any]] = {
             {
                 "heading": "Medication Timing & Stress Control",
                 "items": [
-                    "Take Lisinopril at the same hour each morning with water.",
+                    "Take all prescribed blood pressure medications at consistent times as directed by your physician.",
                     "Practice 5 minutes of relaxed diaphragmatic breathing twice a day.",
                     "Limit alcohol and quit smoking to protect arterial elasticity.",
                 ],

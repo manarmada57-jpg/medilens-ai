@@ -2,6 +2,7 @@
 Medical Retrieval-Augmented Generation (RAG) Service.
 Grounds all health explanations strictly in MedlinePlus, WHO, and NIH sources with citations.
 Rule: If reliable information is unavailable, explicitly state so instead of inventing an answer.
+No personal names, specific drug prescriptions, dose advice, or fake "verified" claims.
 """
 
 from typing import Any
@@ -10,15 +11,15 @@ from app.db.indexes import KNOWLEDGE_COLLECTION
 from app.db.mongo import db_manager
 
 # Comprehensive Grounded Medical Knowledge Catalog (MedlinePlus, WHO, NIH)
-TRUSTED_MEDICAL_CATALOG = {
+TRUSTED_MEDICAL_CATALOG: dict[str, dict[str, Any]] = {
     "Fasting Blood Glucose": {
         "source": "MedlinePlus Medical Encyclopedia (U.S. National Library of Medicine)",
         "source_url": "https://medlineplus.gov/lab-tests/blood-glucose-test/",
         "definition": "A fasting blood glucose test measures how much sugar (glucose) is in your blood after fasting for at least 8 hours.",
-        "plain_explanation": "Glucose is your body's primary energy source from food. When fasting levels are mildly above your report's reference range, it indicates your body may be taking longer to clear sugar from the bloodstream, which is why your physician may monitor this reading alongside medications like Metformin.",
+        "plain_explanation": "Glucose is your body's primary energy source from food. When fasting levels are mildly above your report's reference range, it indicates your body may be taking longer to clear sugar from the bloodstream, which is why your physician monitors this reading.",
         "questions_for_doctor": [
-            "Does my fasting glucose level suggest I should adjust the timing or dosage of my medicine?",
             "What target fasting glucose range should we aim for over the next 3 to 6 months?",
+            "What lifestyle or dietary modifications are most effective for improving my glucose balance?",
         ],
     },
     "Hemoglobin A1c (HbA1c)": {
@@ -27,7 +28,7 @@ TRUSTED_MEDICAL_CATALOG = {
         "definition": "The A1C test measures your average blood glucose levels over the past 2 to 3 months by checking how much sugar is attached to your red blood cells.",
         "plain_explanation": "Because red blood cells live for about 3 months, HbA1c provides a reliable picture of your long-term glucose management rather than just a single moment in time.",
         "questions_for_doctor": [
-            "What is my personalized A1C target based on my overall health and regimen?",
+            "What is my personalized A1C target based on my overall health?",
             "How often should we repeat this test to evaluate my progress?",
         ],
     },
@@ -35,10 +36,10 @@ TRUSTED_MEDICAL_CATALOG = {
         "source": "MedlinePlus (National Library of Medicine)",
         "source_url": "https://medlineplus.gov/cholesterol.html",
         "definition": "Total cholesterol measures all the cholesterol in your blood, which includes low-density lipoprotein (LDL) and high-density lipoprotein (HDL).",
-        "plain_explanation": "Cholesterol is a waxy substance needed to build cells, but having higher levels can lead to plaque buildup in arteries. Dr. Watson prescribed Atorvastatin to help keep this within normal balance.",
+        "plain_explanation": "Cholesterol is a waxy substance needed to build cells, but having higher levels can lead to plaque buildup in arteries. Maintaining balanced cholesterol helps support cardiovascular health.",
         "questions_for_doctor": [
             "How do my HDL and LDL breakdown ratios look compared to my total cholesterol?",
-            "Are there dietary modifications that work well with my current cholesterol medication?",
+            "What heart-healthy dietary habits should I focus on?",
         ],
     },
     "Serum Creatinine": {
@@ -54,10 +55,10 @@ TRUSTED_MEDICAL_CATALOG = {
         "source": "World Health Organization (WHO) Hypertension Guidelines",
         "source_url": "https://www.who.int/news-room/fact-sheets/detail/hypertension",
         "definition": "Blood pressure is the force exerted by circulating blood against the walls of the body's arteries.",
-        "plain_explanation": "Keeping blood pressure in a healthy range protects your heart, kidneys, and blood vessels. Lisinopril works by relaxing blood vessels so blood flows more smoothly.",
+        "plain_explanation": "Keeping blood pressure in a healthy range protects your heart, kidneys, and blood vessels. Healthy arterial elasticity allows blood to circulate smoothly.",
         "questions_for_doctor": [
             "What home blood pressure reading should prompt a call to the clinic?",
-            "Should I log my blood pressure before or after taking my morning Lisinopril?",
+            "What time of day is best for logging my resting blood pressure?",
         ],
     },
 }
@@ -94,11 +95,11 @@ class MedicalRAGService:
 
         # 3. Transparent unavailable state
         return {
-            "source": "MediLens Verified Catalog",
+            "source": "MedlinePlus / WHO",
             "source_url": "https://medlineplus.gov",
             "definition": "General health observation.",
             "plain_explanation": (
-                f"Reliable educational summary for '{biomarker_name}' is not currently indexed in our verified MedlinePlus/WHO knowledge base. "
+                f"Reliable educational summary for '{biomarker_name}' is not currently indexed in our MedlinePlus/WHO knowledge base. "
                 "Please review this specific result directly with your healthcare provider."
             ),
             "questions_for_doctor": [

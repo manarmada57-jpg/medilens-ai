@@ -14,7 +14,7 @@ async def auth_headers(client: AsyncClient) -> dict[str, str]:
         json={
             "email": "meds.tester@example.com",
             "password": "MedsPassword123!",
-            "name": "Eleanor Mitchell",
+            "name": "Medication Patient",
             "accept_terms": True,
         },
     )
@@ -26,38 +26,54 @@ async def auth_headers(client: AsyncClient) -> dict[str, str]:
 async def test_get_default_medications(client: AsyncClient, auth_headers: dict[str, str]):
     response = await client.get("/api/medicines", headers=auth_headers)
     assert response.status_code == 200
-    meds = response.json()
-    assert len(meds) == 3
-    names = [m["name"] for m in meds]
-    assert "Lisinopril 10mg" in names
-    assert "Metformin 500mg" in names
-    assert "Atorvastatin 20mg" in names
+    data = response.json()
+    meds = data.get("medicines", data)
+    # A new account must have zero medications (no fake pre-seeded medications)
+    assert len(meds) == 0
 
 
 @pytest.mark.asyncio
 async def test_take_medication_and_verify_decrement(client: AsyncClient, auth_headers: dict[str, str]):
-    # Get initial list
-    meds_resp = await client.get("/api/medicines", headers=auth_headers)
-    meds = meds_resp.json()
-    metformin = next(m for m in meds if "Metformin" in m["name"])
-    initial_pills = metformin["pillsLeft"]
+    # Create an actual medication
+    create_payload = {
+        "name": "Amoxicillin 500mg",
+        "dosage": "1 capsule three times daily",
+        "instructions": "Take with water after meals",
+        "timeSlot": "MORNING",
+        "timeDisplay": "8:00 AM",
+        "times": ["08:00"],
+        "category": "Infection",
+        "pillsLeft": 20,
+        "pillsTotal": 20,
+    }
+    create_resp = await client.post("/api/medicines", headers=auth_headers, json=create_payload)
+    assert create_resp.status_code == 201
+    med = create_resp.json()
+    med_id = med["id"]
+    initial_pills = med["pillsLeft"]
 
     # Log as taken
     take_resp = await client.post(
-        f"/api/medicines/{metformin['id']}/take",
+        f"/api/medicines/{med_id}/take",
         headers=auth_headers,
         json={"notes": "Taken with lunch"},
     )
     assert take_resp.status_code == 200
     assert "message" in take_resp.json() or take_resp.json().get("success") is True
 
-    # Re-fetch medications list
+    # Re-fetch medications list and verify decrement
     updated_resp = await client.get("/api/medicines", headers=auth_headers)
-    updated_metformin = next(m for m in updated_resp.json() if m["id"] == metformin["id"])
-    assert updated_metformin["taken"] is True
-    assert updated_metformin["dueStatus"] == "Confirmed taken"
-    assert updated_metformin["dueStatusType"] == "taken"
-    assert updated_metformin["pillsLeft"] == initial_pills - 1
+    updated_data = updated_resp.json()
+    updated_meds = updated_data.get("medicines", updated_data)
+    updated_med = next(m for m in updated_meds if m["id"] == med_id)
+    assert updated_med["pillsLeft"] == initial_pills - 1
+
+    # Verify schedule/today
+    sched_resp = await client.get("/api/medicines/schedule/today", headers=auth_headers)
+    assert sched_resp.status_code == 200
+    sched_doses = sched_resp.json().get("doses", [])
+    matched_dose = next(d for d in sched_doses if d["medicineId"] == med_id)
+    assert matched_dose["status"] == "taken"
 
 
 @pytest.mark.asyncio
@@ -79,18 +95,28 @@ async def test_create_and_delete_medication(client: AsyncClient, auth_headers: d
 
     # Delete medication
     del_resp = await client.delete(f"/api/medicines/{new_id}", headers=auth_headers)
-    assert del_resp.status_code == 200
+    assert del_resp.status_code in (200, 204)
 
     # Ensure no longer in active list
     list_resp = await client.get("/api/medicines", headers=auth_headers)
-    ids = [m["id"] for m in list_resp.json()]
+    meds_list = list_resp.json().get("medicines", list_resp.json())
+    ids = [m["id"] for m in meds_list]
     assert new_id not in ids
 
 
 @pytest.mark.asyncio
 async def test_snooze_medication(client: AsyncClient, auth_headers: dict[str, str]):
-    meds = (await client.get("/api/medicines", headers=auth_headers)).json()
-    med_id = meds[0]["id"]
+    create_payload = {
+        "name": "Vitamin C 500mg",
+        "dosage": "1 tablet daily",
+        "instructions": "Take with breakfast",
+        "timeSlot": "MORNING",
+        "timeDisplay": "8:00 AM",
+        "pillsLeft": 30,
+    }
+    create_resp = await client.post("/api/medicines", headers=auth_headers, json=create_payload)
+    assert create_resp.status_code == 201
+    med_id = create_resp.json()["id"]
 
     snooze_resp = await client.post(
         f"/api/medicines/{med_id}/snooze",
@@ -103,14 +129,24 @@ async def test_snooze_medication(client: AsyncClient, auth_headers: dict[str, st
 
 @pytest.mark.asyncio
 async def test_refill_alerts(client: AsyncClient, auth_headers: dict[str, str]):
+    create_payload = {
+        "name": "Thyroxine 50mcg",
+        "dosage": "1 tablet daily",
+        "instructions": "Take in morning on empty stomach",
+        "timeSlot": "MORNING",
+        "timeDisplay": "7:00 AM",
+        "pillsLeft": 4,
+        "pillsTotal": 30,
+    }
+    create_resp = await client.post("/api/medicines", headers=auth_headers, json=create_payload)
+    assert create_resp.status_code == 201
+
     response = await client.get("/api/medicines/refill-alerts", headers=auth_headers)
     assert response.status_code == 200
     alerts = response.json()
     assert len(alerts) >= 1
-    # Atorvastatin has 4 pills left (< 7), should trigger alert
-    atorvastatin_alert = next(a for a in alerts if "Atorvastatin" in a["medicationName"])
-    assert atorvastatin_alert["pillsLeft"] == 4
-    assert atorvastatin_alert["pharmacy"] == "CVS Pharmacy #4821"
+    thyroxine_alert = next(a for a in alerts if "Thyroxine" in a["medicationName"])
+    assert thyroxine_alert["pillsLeft"] == 4
 
 
 @pytest.mark.asyncio

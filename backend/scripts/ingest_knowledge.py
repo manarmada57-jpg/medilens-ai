@@ -28,7 +28,7 @@ INGESTION_DATA = [
         "definition": "Measures blood sugar concentration after an overnight fast of 8 to 12 hours.",
         "plain_explanation": "Glucose fuels your body's cells. When levels are mildly above 100 mg/dL, it indicates the body requires extra time or medication support to clear glucose into cells.",
         "questions_for_doctor": [
-            "Does my fasting glucose reading indicate pre-diabetes or require medication adjustment?",
+            "Does my fasting glucose reading indicate a need for further evaluation?",
             "What morning fasting range should I aim for based on my age and health history?",
         ],
     },

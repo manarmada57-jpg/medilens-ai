@@ -41,6 +41,26 @@ class DatabaseException(MediLensException):
         )
 
 
+class FeatureUnavailableException(MediLensException):
+    def __init__(self, message: str = "Feature is not available yet", details: dict[str, Any] | None = None):
+        super().__init__(
+            message=message,
+            code="FEATURE_UNAVAILABLE",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            details=details,
+        )
+
+
+class UnreadableDocumentException(MediLensException):
+    def __init__(self, message: str = "Please upload a clearer photo or PDF", details: dict[str, Any] | None = None):
+        super().__init__(
+            message=message,
+            code="UNREADABLE_DOCUMENT",
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            details=details,
+        )
+
+
 class NotFoundException(MediLensException):
     def __init__(self, resource: str = "Resource", details: dict[str, Any] | None = None):
         super().__init__(

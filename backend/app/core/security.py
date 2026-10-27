@@ -21,7 +21,6 @@ from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from app.core.config import settings
 from app.core.logging import logger
 
-
 # ---------------------------------------------------------------------------
 # Password Hashing (Argon2id)
 # ---------------------------------------------------------------------------
