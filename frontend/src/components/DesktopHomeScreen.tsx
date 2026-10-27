@@ -186,10 +186,10 @@ export const DesktopHomeScreen: React.FC<DesktopHomeScreenProps> = ({
             </div>
           </div>
           <div className="mt-2 text-base font-extrabold text-gray-900 truncate">
-            {nextMedicine.name}
+            {nextMedicine ? nextMedicine.name : 'No doses today'}
           </div>
           <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-amber-700">
-            <span>Due at {nextMedicine.timeDisplay || 'Scheduled Time'} ({nextMedicine.instructions || 'as prescribed'})</span>
+            <span>{nextMedicine ? `Due at ${nextMedicine.timeDisplay || 'Scheduled Time'} (${nextMedicine.instructions || 'as prescribed'})` : 'Regimen up to date'}</span>
           </div>
         </div>
 
@@ -335,52 +335,64 @@ export const DesktopHomeScreen: React.FC<DesktopHomeScreenProps> = ({
         {/* ── Column 2: Next Medication & Doctor Discussion ─────────────── */}
         <div className="space-y-6">
           {/* Next Medicine Card */}
-          <div className="rounded-2xl border border-[#d8ecea] bg-white p-5 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-xs font-bold tracking-wider text-[#1d4ed8] uppercase">
-                <Clock className="w-4 h-4" />
-                <span>Next Scheduled Dose</span>
+          {nextMedicine ? (
+            <div className="rounded-2xl border border-[#d8ecea] bg-white p-5 shadow-xs space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-bold tracking-wider text-[#1d4ed8] uppercase">
+                  <Clock className="w-4 h-4" />
+                  <span>Next Scheduled Dose</span>
+                </div>
+
+                <div className="inline-flex items-center gap-1 rounded-full bg-[#fef3c7] px-2.5 py-1 text-[11px] font-semibold text-[#92400e] border border-[#fde68a]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#d97706] animate-pulse"></span>
+                  <span>Today • {nextMedicine.timeDisplay || 'Scheduled Time'}</span>
+                </div>
               </div>
 
-              <div className="inline-flex items-center gap-1 rounded-full bg-[#fef3c7] px-2.5 py-1 text-[11px] font-semibold text-[#92400e] border border-[#fde68a]">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#d97706] animate-pulse"></span>
-                <span>Today • {nextMedicine.timeDisplay || 'Scheduled Time'}</span>
+              <div>
+                <h3 className="text-xl font-extrabold text-gray-900">
+                  {nextMedicine.name}
+                </h3>
+                <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                  {nextMedicine.instructions} • {nextMedicine.loggedBy || 'As prescribed'}
+                </p>
+              </div>
+
+              {/* Action Row */}
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={handleTakeNext}
+                  disabled={nextMedicine.taken}
+                  className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-3 px-4 text-xs font-bold shadow-xs transition-all ${
+                    nextMedicine.taken
+                      ? 'bg-[#10b981] text-white cursor-default'
+                      : 'bg-[#1d4ed8] hover:bg-[#1e40af] text-white active:scale-98'
+                  }`}
+                >
+                  <Check className="w-4 h-4 stroke-[2.5]" />
+                  <span>{nextMedicine.taken ? 'Confirmed Taken ✓' : 'Mark as Taken'}</span>
+                </button>
+
+                <button
+                  onClick={() => onSnoozeMedication(nextMedicine.id)}
+                  title="Snooze 15 minutes"
+                  className="flex items-center justify-center w-12 h-11 rounded-xl bg-[#e0f2fe] hover:bg-[#bae6fd] text-[#0369a1] transition-all active:scale-95 border border-[#bae6fd]"
+                >
+                  <Clock className="w-4 h-4 stroke-[2]" />
+                </button>
               </div>
             </div>
-
-            <div>
-              <h3 className="text-xl font-extrabold text-gray-900">
-                {nextMedicine.name}
-              </h3>
-              <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                {nextMedicine.instructions} • {nextMedicine.loggedBy || 'As prescribed'}
+          ) : (
+            <div className="rounded-2xl border border-dashed border-[#cbd5e1] bg-white p-6 text-center space-y-2">
+              <div className="w-12 h-12 rounded-full bg-[#f1f5f9] text-[#64748b] mx-auto flex items-center justify-center">
+                <Clock className="w-6 h-6" />
+              </div>
+              <h3 className="text-sm font-bold text-gray-800">No scheduled doses today</h3>
+              <p className="text-xs text-gray-500 max-w-sm mx-auto">
+                Add doctor-prescribed medications to receive scheduled reminders and track daily doses.
               </p>
             </div>
-
-            {/* Action Row */}
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                onClick={handleTakeNext}
-                disabled={nextMedicine.taken}
-                className={`flex-1 flex items-center justify-center gap-2 rounded-xl py-3 px-4 text-xs font-bold shadow-xs transition-all ${
-                  nextMedicine.taken
-                    ? 'bg-[#10b981] text-white cursor-default'
-                    : 'bg-[#1d4ed8] hover:bg-[#1e40af] text-white active:scale-98'
-                }`}
-              >
-                <Check className="w-4 h-4 stroke-[2.5]" />
-                <span>{nextMedicine.taken ? 'Confirmed Taken ✓' : 'Mark as Taken'}</span>
-              </button>
-
-              <button
-                onClick={() => onSnoozeMedication(nextMedicine.id)}
-                title="Snooze 15 minutes"
-                className="flex items-center justify-center w-12 h-11 rounded-xl bg-[#e0f2fe] hover:bg-[#bae6fd] text-[#0369a1] transition-all active:scale-95 border border-[#bae6fd]"
-              >
-                <Clock className="w-4 h-4 stroke-[2]" />
-              </button>
-            </div>
-          </div>
+          )}
 
           {/* Questions for Doctor Card (Derived from intake & lab tests) */}
           <div className="bg-gradient-to-br from-[#f0faf9] to-[#e6f7f6] rounded-2xl p-5 border border-[#cbebe8] shadow-xs space-y-3">
