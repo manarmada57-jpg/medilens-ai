@@ -257,7 +257,10 @@ export default function App() {
   const handleSaveMedicalHistory = async (data: MedicalHistory) => {
     setMedicalHistory(data);
     try {
-      await profileApi.saveMedicalHistory(data);
+      const saved = await profileApi.saveMedicalHistory(data);
+      if (saved) {
+        setMedicalHistory(saved);
+      }
       setSaveHistoryError(null);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save medical history to server';
@@ -265,7 +268,7 @@ export default function App() {
     }
 
     // Refresh user summary and medicine lists
-    loadUserData();
+    await loadUserData();
     setFlowStep('dashboard');
   };
 
@@ -351,6 +354,7 @@ export default function App() {
             profile={profile}
             medications={medications}
             documents={documents}
+            medicalHistory={medicalHistory}
             onTakeMedication={handleTakeMedication}
             onSnoozeMedication={handleSnoozeMedication}
             onSelectDocument={(doc) => {
@@ -361,6 +365,7 @@ export default function App() {
             onOpenSampleReport={() => {
               if (documents.length > 0) setActiveDocument(documents[0]);
             }}
+            onEditMedicalHistory={() => setFlowStep('medical_history')}
           />
         );
 
@@ -439,6 +444,7 @@ export default function App() {
             profile={profile}
             medications={medications}
             documents={documents}
+            medicalHistory={medicalHistory}
             onTakeMedication={handleTakeMedication}
             onSnoozeMedication={handleSnoozeMedication}
             onSelectDocument={(doc) => {
@@ -449,6 +455,7 @@ export default function App() {
             onOpenSampleReport={() => {
               if (documents.length > 0) setActiveDocument(documents[0]);
             }}
+            onEditMedicalHistory={() => setFlowStep('medical_history')}
           />
         );
 

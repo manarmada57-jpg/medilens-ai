@@ -54,6 +54,48 @@ class MedicalHistorySchema(BaseModel):
             raise ValueError("Date of birth cannot be in the future")
         return str(v)
 
+    @field_validator("sex", mode="before")
+    @classmethod
+    def validate_sex(cls, v: object) -> str | None:
+        if not v or not str(v).strip():
+            return None
+        val = str(v).strip().lower()
+        if val in ("female", "f"):
+            return "Female"
+        elif val in ("male", "m"):
+            return "Male"
+        elif val in ("other", "intersex"):
+            return "Other"
+        elif val in ("prefer not to say", "prefer_not", "prefer_not_to_say"):
+            return "Prefer not to say"
+        formatted = str(v).strip().title()
+        if formatted in ("Male", "Female", "Other"):
+            return formatted
+        if formatted in ("Prefer Not To Say", "Prefer_Not_To_Say"):
+            return "Prefer not to say"
+        return None
+
+    @field_validator("allergyType", mode="before")
+    @classmethod
+    def validate_allergy_type(cls, v: object) -> str | None:
+        if not v or not str(v).strip():
+            return None
+        val = str(v).strip().lower()
+        if val in ("medicine", "drug"):
+            return "Drug"
+        elif val == "food":
+            return "Food"
+        elif val == "environmental":
+            return "Environmental"
+        elif val == "none":
+            return "None"
+        elif val == "other":
+            return "Other"
+        formatted = str(v).strip().capitalize()
+        if formatted in ("None", "Food", "Drug", "Environmental", "Other"):
+            return formatted
+        return None
+
     @field_validator("conditions", mode="before")
     @classmethod
     def validate_conditions(cls, v: list) -> list:

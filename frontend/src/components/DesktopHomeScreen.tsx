@@ -23,30 +23,35 @@ import {
   AlertCircle,
   HelpCircle,
   Share2,
+  Heart,
 } from 'lucide-react';
-import { Medication, HealthDocument, UserProfile } from '../types';
+import { Medication, HealthDocument, UserProfile, MedicalHistory } from '../types';
 import confetti from 'canvas-confetti';
 
 interface DesktopHomeScreenProps {
   profile: UserProfile;
   medications: Medication[];
   documents?: HealthDocument[];
+  medicalHistory?: MedicalHistory | null;
   onTakeMedication: (id: string) => void;
   onSnoozeMedication: (id: string) => void;
   onSelectDocument: (doc: HealthDocument) => void;
   onNavigateToUpload: (mode?: 'report' | 'prescription' | 'image', file?: File) => void;
   onOpenSampleReport: () => void;
+  onEditMedicalHistory?: () => void;
 }
 
 export const DesktopHomeScreen: React.FC<DesktopHomeScreenProps> = ({
   profile,
   medications,
   documents = [],
+  medicalHistory,
   onTakeMedication,
   onSnoozeMedication,
   onSelectDocument,
   onNavigateToUpload,
   onOpenSampleReport,
+  onEditMedicalHistory,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -393,6 +398,75 @@ export const DesktopHomeScreen: React.FC<DesktopHomeScreenProps> = ({
               </p>
             </div>
           )}
+
+          {/* Health Profile Summary Card */}
+          <div className="rounded-2xl border border-[#d8ecea] bg-white p-5 shadow-xs space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Heart className="w-4 h-4 text-[#0a7075]" />
+                <h3 className="text-xs font-bold text-[#0a7075] uppercase tracking-wider">
+                  Your Health Profile
+                </h3>
+              </div>
+              {onEditMedicalHistory && (
+                <button
+                  onClick={onEditMedicalHistory}
+                  className="text-xs font-semibold text-[#0a7075] hover:underline cursor-pointer"
+                >
+                  {medicalHistory ? 'Edit' : '+ Add'}
+                </button>
+              )}
+            </div>
+
+            {medicalHistory ? (
+              <div className="space-y-2.5">
+                <div className="flex flex-wrap gap-1.5">
+                  {medicalHistory.conditions && medicalHistory.conditions.length > 0 ? (
+                    medicalHistory.conditions.map((cond, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center px-2.5 py-1 rounded-full bg-[#e0f7f6] text-[#00756e] font-bold text-xs border border-[#a2e3de]"
+                      >
+                        {cond}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-gray-500">No chronic conditions listed</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-3 pt-2 text-xs text-gray-600 border-t border-gray-100">
+                  <div>
+                    <span className="text-gray-400 block text-[10px] uppercase font-bold">Allergies</span>
+                    <span className="font-semibold text-gray-800">
+                      {medicalHistory.noKnownAllergies
+                        ? 'No known allergies'
+                        : medicalHistory.specificAllergen || (medicalHistory.allergyType ? `Allergic (${medicalHistory.allergyType})` : 'None recorded')}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 block text-[10px] uppercase font-bold">Current Medications</span>
+                    <span className="font-semibold text-gray-800">
+                      {medicalHistory.currentMedicines && medicalHistory.currentMedicines.length > 0
+                        ? `${medicalHistory.currentMedicines.length} listed`
+                        : 'None recorded'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between py-1">
+                <p className="text-xs text-gray-500">No medical history on file yet.</p>
+                {onEditMedicalHistory && (
+                  <button
+                    onClick={onEditMedicalHistory}
+                    className="px-3.5 py-1.5 rounded-xl bg-[#0a7075] text-white text-xs font-semibold hover:bg-[#07595e] transition-colors"
+                  >
+                    Complete Intake
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Questions for Doctor Card (Derived from intake & lab tests) */}
           <div className="bg-gradient-to-br from-[#f0faf9] to-[#e6f7f6] rounded-2xl p-5 border border-[#cbebe8] shadow-xs space-y-3">

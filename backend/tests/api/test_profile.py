@@ -170,3 +170,44 @@ async def test_medical_history_alias_endpoint(client: AsyncClient):
     fetch = await client.get("/api/profile", headers=headers)
     assert fetch.status_code == 200
     assert fetch.json()["profile"]["conditions"] == ["Asthma"]
+
+
+@pytest.mark.asyncio
+async def test_medical_history_frontend_intake_contract(client: AsyncClient):
+    """Verifies that frontend intake payloads (e.g. lowercase sex, medicine allergy) are normalized and saved."""
+    token, _ = await _signup_and_token(
+        client,
+        {
+            "email": "frontend.intake@example.com",
+            "password": "Password123!",
+            "name": "Intake Tester",
+            "accept_terms": True,
+        },
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+
+    frontend_payload = {
+        "dob": "1992-06-15",
+        "sex": "female",
+        "conditions": ["Diabetes", "Asthma"],
+        "allergyType": "medicine",
+        "noKnownAllergies": False,
+        "specificAllergen": "Amoxicillin",
+        "currentMedicines": [{"name": "Inhaler", "dosage": "2 puffs"}],
+        "pastSurgeries": "None",
+    }
+
+    save_resp = await client.put("/api/profile", headers=headers, json=frontend_payload)
+    assert save_resp.status_code == 200, save_resp.text
+    saved = save_resp.json()["profile"]
+    assert saved["sex"] == "Female"
+    assert saved["allergyType"] == "Drug"
+    assert saved["conditions"] == ["Diabetes", "Asthma"]
+    assert saved["specificAllergen"] == "Amoxicillin"
+
+    # Re-fetch to confirm persistence
+    get_resp = await client.get("/api/profile", headers=headers)
+    assert get_resp.status_code == 200
+    fetched = get_resp.json()["profile"]
+    assert fetched["sex"] == "Female"
+    assert fetched["allergyType"] == "Drug"

@@ -18,30 +18,35 @@ import {
   CheckCheck,
   BellRing,
   HelpCircle,
+  Heart,
 } from 'lucide-react';
-import { Medication, HealthDocument, UserProfile } from '../types';
+import { Medication, HealthDocument, UserProfile, MedicalHistory } from '../types';
 import confetti from 'canvas-confetti';
 
 interface HomeScreenProps {
   profile: UserProfile;
   medications: Medication[];
   documents?: HealthDocument[];
+  medicalHistory?: MedicalHistory | null;
   onTakeMedication: (id: string) => void;
   onSnoozeMedication: (id: string) => void;
   onSelectDocument: (doc: HealthDocument) => void;
   onNavigateToUpload: (mode?: 'report' | 'prescription' | 'image', file?: File) => void;
   onOpenSampleReport: () => void;
+  onEditMedicalHistory?: () => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   profile,
   medications,
   documents = [],
+  medicalHistory,
   onTakeMedication,
   onSnoozeMedication,
   onSelectDocument,
   onNavigateToUpload,
   onOpenSampleReport,
+  onEditMedicalHistory,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -301,6 +306,73 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </p>
         </div>
       )}
+
+      {/* Health Profile Summary Card */}
+      <div className="rounded-2xl border border-[#d6ebe8] bg-white p-4 shadow-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs font-bold tracking-wider text-[#0a7075] uppercase">
+            <Heart className="w-4 h-4" />
+            <span>YOUR HEALTH PROFILE</span>
+          </div>
+          {onEditMedicalHistory && (
+            <button
+              onClick={onEditMedicalHistory}
+              className="text-xs font-semibold text-[#0a7075] hover:underline"
+            >
+              {medicalHistory ? 'Edit' : '+ Add'}
+            </button>
+          )}
+        </div>
+
+        {medicalHistory ? (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-1.5">
+              {medicalHistory.conditions && medicalHistory.conditions.length > 0 ? (
+                medicalHistory.conditions.map((cond, idx) => (
+                  <span
+                    key={idx}
+                    className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#e0f7f6] text-[#00756e] font-semibold text-[11px] border border-[#a2e3de]"
+                  >
+                    {cond}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs text-gray-500">No chronic conditions listed</span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-1 text-[11px] text-gray-600 border-t border-gray-100">
+              <div>
+                <span className="text-gray-400 block text-[10px] uppercase font-bold">Allergies</span>
+                <span className="font-medium text-gray-800">
+                  {medicalHistory.noKnownAllergies
+                    ? 'None'
+                    : medicalHistory.specificAllergen || (medicalHistory.allergyType ? `Allergic (${medicalHistory.allergyType})` : 'None')}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-400 block text-[10px] uppercase font-bold">Current Meds</span>
+                <span className="font-medium text-gray-800">
+                  {medicalHistory.currentMedicines && medicalHistory.currentMedicines.length > 0
+                    ? `${medicalHistory.currentMedicines.length} listed`
+                    : 'None recorded'}
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between py-1">
+            <p className="text-xs text-gray-500">No medical history on file yet.</p>
+            {onEditMedicalHistory && (
+              <button
+                onClick={onEditMedicalHistory}
+                className="px-3 py-1 rounded-full bg-[#0a7075] text-white text-xs font-semibold"
+              >
+                Complete Intake
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Recent Documents */}
       <div className="space-y-2.5 pt-1">
