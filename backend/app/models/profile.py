@@ -30,6 +30,8 @@ class UserProfileUpdateRequest(BaseModel):
 
 
 class MedicalHistorySchema(BaseModel):
+    model_config = {"extra": "ignore"}
+
     dob: str | None = Field(None, description="Date of birth in ISO 8601 format (YYYY-MM-DD)")
     sex: Literal["Male", "Female", "Other", "Prefer not to say"] | None = None
     conditions: list[str] = Field(default_factory=list, max_length=50)
@@ -38,21 +40,32 @@ class MedicalHistorySchema(BaseModel):
     specificAllergen: str | None = Field(None, max_length=200)
     currentMedicines: list[CurrentMedicineItem] = Field(default_factory=list, max_length=100)
     pastSurgeries: str | None = Field(None, max_length=1000)
-    # uploadedFiles removed — use document IDs instead
     documentIds: list[str] = Field(default_factory=list)
 
     @field_validator("dob", mode="before")
     @classmethod
-    def validate_dob(cls, v: str | None) -> str | None:
+    def validate_dob(cls, v: object) -> str | None:
         if v is None or v == "":
             return None
-        try:
-            parsed = date.fromisoformat(str(v))
-        except ValueError as err:
-            raise ValueError("dob must be a valid ISO date (YYYY-MM-DD)") from err
+        val_str = str(v).strip()
+        if not val_str:
+            return None
+        from datetime import datetime
+        parsed: date | None = None
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y", "%m-%d-%Y", "%Y/%m/%d"):
+            try:
+                parsed = datetime.strptime(val_str, fmt).date()
+                break
+            except ValueError:
+                continue
+        if not parsed:
+            try:
+                parsed = date.fromisoformat(val_str)
+            except ValueError as err:
+                raise ValueError("Date of birth must be a valid date (e.g. DD/MM/YYYY or YYYY-MM-DD)") from err
         if parsed > date.today():
             raise ValueError("Date of birth cannot be in the future")
-        return str(v)
+        return parsed.isoformat()
 
     @field_validator("sex", mode="before")
     @classmethod

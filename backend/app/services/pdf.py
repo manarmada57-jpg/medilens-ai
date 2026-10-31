@@ -23,7 +23,6 @@ class PDFExtractor:
             (extracted_text, is_scanned_image_based)
         """
         text_parts: list[str] = []
-        is_scanned = True
         try:
             doc = fitz.open(stream=pdf_bytes, filetype="pdf")
             total_chars = 0
@@ -34,11 +33,11 @@ class PDFExtractor:
                     text_parts.append(page_text)
                     total_chars += len(page_text)
 
-            # If document has substantial digital text (>= 80 characters), use digital text
-            if total_chars >= 80:
-                is_scanned = False
+            combined_digital = "\n\n".join(text_parts).strip()
+            # If document has substantial or readable digital text, use it directly
+            if combined_digital and ocr_service.is_image_readable(combined_digital):
                 doc.close()
-                return "\n\n".join(text_parts).strip(), is_scanned
+                return combined_digital, False
 
             # Otherwise, render pages to images at 200 DPI and run OCR
             logger.info("PDF has sparse digital text (%d chars); rendering pages to images for OCR", total_chars)

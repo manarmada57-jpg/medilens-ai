@@ -16,12 +16,16 @@ import { MedicalHistory } from '../types';
 
 interface MedicalHistoryScreenProps {
   initialData?: MedicalHistory | null;
+  errorMessage?: string | null;
+  isSaving?: boolean;
   onSave: (data: MedicalHistory) => void;
   onSkip: () => void;
 }
 
 export const MedicalHistoryScreen: React.FC<MedicalHistoryScreenProps> = ({
   initialData,
+  errorMessage,
+  isSaving = false,
   onSave,
   onSkip,
 }) => {
@@ -116,16 +120,21 @@ export const MedicalHistoryScreen: React.FC<MedicalHistoryScreenProps> = ({
   };
 
   const handleSubmit = () => {
+    let cleanDob = dob.trim();
+    if (/^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}$/.test(cleanDob)) {
+      const parts = cleanDob.split(/[\/\-\.]/);
+      // If DD/MM/YYYY
+      cleanDob = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
     onSave({
-      dob,
+      dob: cleanDob || undefined,
       sex: (sex as MedicalHistory['sex']) || undefined,
-      conditions,
-      allergyType,
+      conditions: conditions.filter((c) => c !== 'None'),
+      allergyType: allergyType || undefined,
       noKnownAllergies,
-      specificAllergen,
+      specificAllergen: specificAllergen.trim() || undefined,
       currentMedicines: medicines,
-      pastSurgeries,
-      uploadedFiles,
+      pastSurgeries: pastSurgeries.trim() || undefined,
     });
   };
 
@@ -181,6 +190,14 @@ export const MedicalHistoryScreen: React.FC<MedicalHistoryScreenProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Validation or save error message */}
+        {errorMessage && (
+          <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        )}
 
         {/* Stepper Progress Bar */}
         <div className="flex items-center justify-between max-w-xl mx-auto pt-1 pb-2">
@@ -577,9 +594,10 @@ export const MedicalHistoryScreen: React.FC<MedicalHistoryScreenProps> = ({
             <button
               type="button"
               onClick={handleSubmit}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#007f87] hover:bg-[#006e75] text-white px-5 py-2.5 text-xs font-bold shadow-md shadow-[#007f87]/20 active:scale-98 transition-all"
+              disabled={isSaving}
+              className="inline-flex items-center gap-2 rounded-xl bg-[#007f87] hover:bg-[#006e75] disabled:opacity-50 text-white px-5 py-2.5 text-xs font-bold shadow-md shadow-[#007f87]/20 active:scale-98 transition-all"
             >
-              <span>Save and continue</span>
+              <span>{isSaving ? 'Saving profile...' : 'Save and continue'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

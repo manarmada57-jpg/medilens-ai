@@ -291,11 +291,9 @@ async def analyze_document(
 
     # Step 1: Text Extraction (PDF vs Image)
     extracted_text = ""
-    if "pdf" in content_type or filename.endswith(".pdf"):
+    if "pdf" in content_type or filename.lower().endswith(".pdf"):
         clean_pdf = pdf_extractor.strip_metadata(file_bytes)
-        extracted_text, is_scanned = pdf_extractor.extract_text(clean_pdf)
-        if is_scanned or not extracted_text:
-            extracted_text = ocr_service.extract_text_from_image(file_bytes)
+        extracted_text, _ = pdf_extractor.extract_text(clean_pdf)
     else:
         extracted_text = ocr_service.extract_text_from_image(file_bytes)
 
@@ -386,6 +384,90 @@ async def analyze_document(
                 ],
                 "sourceCitation": rag_data.get("source"),
                 "sourceUrl": rag_data.get("source_url"),
+            }
+        )
+
+    # Hemoglobin / Hb
+    hb_match = re.search(r"(?:hemoglobin|hb)\b[:\s]+(\d+(?:\.\d+)?)\s*([a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
+    if hb_match:
+        val = hb_match.group(1)
+        unit = hb_match.group(2) or "g/dL"
+        remainder = extracted_text[hb_match.end():hb_match.end() + 80]
+        range_match = re.search(r"(?:ref(?:erence)?\s*range[:\s]*)?(\d+(?:\.\d+)?\s*[-–to]\s*\d+(?:\.\d+)?)", remainder, re.IGNORECASE)
+        ref_range = range_match.group(1) if range_match else "12.0 - 16.0 g/dL"
+        status_eval = lab_validator.evaluate_status(val, ref_range)
+        norm_name = lab_validator.normalize_test_name("Hemoglobin")
+        rag_data = await medical_rag.get_grounded_explanation(norm_name)
+        findings.append(
+            {
+                "testName": norm_name,
+                "value": val,
+                "unit": unit,
+                "referenceRange": ref_range,
+                "status": status_eval,
+                "critical": False,
+                "explanation": rag_data.get("plain_explanation", "Hemoglobin carries oxygen throughout your body."),
+                "whyItMatters": "Hemoglobin measures the oxygen-carrying capacity of red blood cells.",
+                "needsReview": False,
+                "sources": [{"name": "MedlinePlus", "title": "Hemoglobin Test", "url": "https://medlineplus.gov/lab-tests/hemoglobin-test/"}],
+                "sourceCitation": rag_data.get("source") or "MedlinePlus Medical Encyclopedia",
+                "sourceUrl": rag_data.get("source_url") or "https://medlineplus.gov/lab-tests/hemoglobin-test/",
+            }
+        )
+
+    # HbA1c
+    a1c_match = re.search(r"(?:hba1c|glycated\s+hemoglobin|a1c)[:\s]+(\d+(?:\.\d+)?)\s*(%|[a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
+    if a1c_match:
+        val = a1c_match.group(1)
+        unit = a1c_match.group(2) or "%"
+        remainder = extracted_text[a1c_match.end():a1c_match.end() + 80]
+        range_match = re.search(r"(?:ref(?:erence)?\s*range[:\s]*)?([<≤]\s*\d+(?:\.\d+)?|\d+\s*[-–to]\s*\d+)", remainder, re.IGNORECASE)
+        ref_range = range_match.group(1) if range_match else "< 5.7 %"
+        status_eval = lab_validator.evaluate_status(val, ref_range)
+        norm_name = lab_validator.normalize_test_name("Hemoglobin A1c (HbA1c)")
+        rag_data = await medical_rag.get_grounded_explanation(norm_name)
+        findings.append(
+            {
+                "testName": norm_name,
+                "value": val,
+                "unit": unit,
+                "referenceRange": ref_range,
+                "status": status_eval,
+                "critical": False,
+                "explanation": rag_data.get("plain_explanation", "HbA1c indicates average blood glucose over 2-3 months."),
+                "whyItMatters": "HbA1c reflects average blood sugar control over the past 2 to 3 months.",
+                "needsReview": False,
+                "sources": [{"name": "NIH", "title": "A1C Test (NIDDK)", "url": "https://www.niddk.nih.gov/health-information/diagnostic-tests/a1c-test"}],
+                "sourceCitation": rag_data.get("source") or "NIH NIDDK",
+                "sourceUrl": rag_data.get("source_url") or "https://www.niddk.nih.gov/health-information/diagnostic-tests/a1c-test",
+            }
+        )
+
+    # Serum Creatinine
+    creat_match = re.search(r"(?:serum\s+creatinine|creatinine)[:\s]+(\d+(?:\.\d+)?)\s*([a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
+    if creat_match:
+        val = creat_match.group(1)
+        unit = creat_match.group(2) or "mg/dL"
+        remainder = extracted_text[creat_match.end():creat_match.end() + 80]
+        range_match = re.search(r"(?:ref(?:erence)?\s*range[:\s]*)?(\d+(?:\.\d+)?\s*[-–to]\s*\d+(?:\.\d+)?)", remainder, re.IGNORECASE)
+        ref_range = range_match.group(1) if range_match else "0.7 - 1.3 mg/dL"
+        status_eval = lab_validator.evaluate_status(val, ref_range)
+        norm_name = lab_validator.normalize_test_name("Serum Creatinine")
+        rag_data = await medical_rag.get_grounded_explanation(norm_name)
+        findings.append(
+            {
+                "testName": norm_name,
+                "value": val,
+                "unit": unit,
+                "referenceRange": ref_range,
+                "status": status_eval,
+                "critical": False,
+                "explanation": rag_data.get("plain_explanation", "Creatinine measures kidney function."),
+                "whyItMatters": "Creatinine is a waste product filtered by the kidneys.",
+                "needsReview": False,
+                "sources": [{"name": "MedlinePlus", "title": "Creatinine Test", "url": "https://medlineplus.gov/lab-tests/creatinine-test/"}],
+                "sourceCitation": rag_data.get("source") or "National Kidney Foundation & MedlinePlus",
+                "sourceUrl": rag_data.get("source_url") or "https://medlineplus.gov/lab-tests/creatinine-test/",
             }
         )
 

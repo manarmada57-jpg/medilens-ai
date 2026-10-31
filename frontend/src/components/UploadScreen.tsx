@@ -107,7 +107,13 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
       }
     } catch (err: unknown) {
       if (err instanceof ApiError) {
-        setError(err.message);
+        if (err.status === 503 || err.code === 'FEATURE_UNAVAILABLE') {
+          setError('AI document analysis requires an active AI provider key (e.g. GEMINI_API_KEY). Please add your Gemini key to .env to enable instant analysis.');
+        } else if (err.status === 422 || err.code === 'UNREADABLE_DOCUMENT') {
+          setError('The document could not be clearly read. Please ensure the file is a clear, high-resolution photo or digital PDF and try again.');
+        } else {
+          setError(err.message);
+        }
       } else {
         setError('Failed to analyze document. Please ensure the file is clearly legible and try again.');
       }

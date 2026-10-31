@@ -5,7 +5,7 @@ import { ApiError } from '../api/client';
 import { User as UserType } from '../types';
 
 interface AuthScreenProps {
-  onSuccess: (user: UserType) => void;
+  onSuccess: (user: UserType, isNewUser?: boolean) => void;
   onCancel?: () => void;
 }
 
@@ -64,7 +64,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess, onCancel }) =
           password,
           acceptTerms: true,
         });
-        onSuccess(res.user);
+        onSuccess(res.user, true);
       } catch (err: unknown) {
         if (err instanceof ApiError) {
           setError(err.message);
@@ -89,7 +89,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess, onCancel }) =
         email: email.trim(),
         password,
       });
-      onSuccess(res.user);
+      onSuccess(res.user, false);
     } catch (err: unknown) {
       if (err instanceof ApiError) {
         setError(err.message);

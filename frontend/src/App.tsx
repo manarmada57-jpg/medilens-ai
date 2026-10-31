@@ -46,6 +46,7 @@ export default function App() {
   const [fontSize, setFontSize] = useState<'normal' | 'large' | 'xlarge'>('normal');
   const [medicalHistory, setMedicalHistory] = useState<MedicalHistory | null>(null);
   const [saveHistoryError, setSaveHistoryError] = useState<string | null>(null);
+  const [isSavingHistory, setIsSavingHistory] = useState(false);
 
   // Upload routing state
   const [uploadMode, setUploadMode] = useState<'report' | 'prescription' | 'image'>('report');
@@ -100,10 +101,11 @@ export default function App() {
   }, [fontSize]);
 
   // Load all dashboard data from API
-  const loadUserData = async (): Promise<void> => {
+  const loadUserData = async (): Promise<{ medicalHistory: MedicalHistory | null }> => {
+    let resolvedHistory: MedicalHistory | null = null;
     try {
       const token = tokenStorage.getAccessToken();
-      if (!token) return;
+      if (!token) return { medicalHistory: null };
 
       // Fetch user and profile summary in parallel; individual failures are tolerated
       const [user, summary, history, docsList, medsList, alerts] = await Promise.allSettled([
@@ -136,6 +138,7 @@ export default function App() {
       }
 
       if (history.status === 'fulfilled') {
+        resolvedHistory = history.value;
         setMedicalHistory(history.value);
       }
 
@@ -153,6 +156,7 @@ export default function App() {
     } catch {
       // Graceful fallback
     }
+    return { medicalHistory: resolvedHistory };
   };
 
   // Session restore: check token on mount, route to login if missing
@@ -163,8 +167,21 @@ export default function App() {
       return;
     }
     // Token present — load data, then decide which step to show
-    loadUserData().then(() => {
-      setFlowStep('dashboard');
+    loadUserData().then(({ medicalHistory: historyData }) => {
+      // If user has not completed medical history intake yet, show it first
+      const hasHistory =
+        historyData &&
+        (historyData.dob ||
+          historyData.sex ||
+          (historyData.conditions && historyData.conditions.length > 0) ||
+          historyData.specificAllergen ||
+          (historyData.currentMedicines && historyData.currentMedicines.length > 0));
+
+      if (!hasHistory) {
+        setFlowStep('medical_history');
+      } else {
+        setFlowStep('dashboard');
+      }
     });
 
     metaApi.getEmergencyMeta().then((meta) => {
@@ -255,24 +272,27 @@ export default function App() {
   };
 
   const handleSaveMedicalHistory = async (data: MedicalHistory) => {
-    setMedicalHistory(data);
+    setIsSavingHistory(true);
+    setSaveHistoryError(null);
     try {
       const saved = await profileApi.saveMedicalHistory(data);
       if (saved) {
         setMedicalHistory(saved);
       }
-      setSaveHistoryError(null);
+      // Refresh user summary and medicine lists
+      await loadUserData();
+      setFlowStep('dashboard');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to save medical history to server';
       setSaveHistoryError(msg);
+      // Stay on the medical history form so the user can review and retry
+    } finally {
+      setIsSavingHistory(false);
     }
-
-    // Refresh user summary and medicine lists
-    await loadUserData();
-    setFlowStep('dashboard');
   };
 
   const handleSkipMedicalHistory = () => {
+    setSaveHistoryError(null);
     setFlowStep('dashboard');
   };
 
@@ -321,10 +341,23 @@ export default function App() {
     return (
       <div className="min-h-screen">
         <AuthScreen
-          onSuccess={(user) => {
+          onSuccess={async (user, isNewUser) => {
             setProfile((prev) => ({ ...prev, name: user.name || prev.name }));
-            loadUserData();
-            setFlowStep('dashboard');
+            const loaded = await loadUserData();
+            const historyData = loaded?.medicalHistory;
+            const hasHistory =
+              historyData &&
+              (historyData.dob ||
+                historyData.sex ||
+                (historyData.conditions && historyData.conditions.length > 0) ||
+                historyData.specificAllergen ||
+                (historyData.currentMedicines && historyData.currentMedicines.length > 0));
+
+            if (isNewUser || !hasHistory) {
+              setFlowStep('medical_history');
+            } else {
+              setFlowStep('dashboard');
+            }
           }}
           onCancel={() => setFlowStep('dashboard')}
         />
@@ -338,6 +371,8 @@ export default function App() {
       <div className="min-h-screen">
         <MedicalHistoryScreen
           initialData={medicalHistory}
+          errorMessage={saveHistoryError}
+          isSaving={isSavingHistory}
           onSave={handleSaveMedicalHistory}
           onSkip={handleSkipMedicalHistory}
         />

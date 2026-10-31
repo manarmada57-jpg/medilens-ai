@@ -186,8 +186,9 @@ async def test_medical_history_frontend_intake_contract(client: AsyncClient):
     )
     headers = {"Authorization": f"Bearer {token}"}
 
+    # Test with DD/MM/YYYY date format
     frontend_payload = {
-        "dob": "1992-06-15",
+        "dob": "15/06/1992",
         "sex": "female",
         "conditions": ["Diabetes", "Asthma"],
         "allergyType": "medicine",
@@ -200,6 +201,7 @@ async def test_medical_history_frontend_intake_contract(client: AsyncClient):
     save_resp = await client.put("/api/profile", headers=headers, json=frontend_payload)
     assert save_resp.status_code == 200, save_resp.text
     saved = save_resp.json()["profile"]
+    assert saved["dob"] == "1992-06-15"
     assert saved["sex"] == "Female"
     assert saved["allergyType"] == "Drug"
     assert saved["conditions"] == ["Diabetes", "Asthma"]
@@ -209,5 +211,6 @@ async def test_medical_history_frontend_intake_contract(client: AsyncClient):
     get_resp = await client.get("/api/profile", headers=headers)
     assert get_resp.status_code == 200
     fetched = get_resp.json()["profile"]
+    assert fetched["dob"] == "1992-06-15"
     assert fetched["sex"] == "Female"
     assert fetched["allergyType"] == "Drug"
