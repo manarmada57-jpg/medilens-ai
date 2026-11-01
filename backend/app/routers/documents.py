@@ -387,8 +387,8 @@ async def analyze_document(
             }
         )
 
-    # Hemoglobin / Hb
-    hb_match = re.search(r"(?:hemoglobin|hb)\b[:\s]+(\d+(?:\.\d+)?)\s*([a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
+    # Hemoglobin / Hb (exclude HbA1c variants)
+    hb_match = re.search(r"(?:hemoglobin(?!\s*a1c|\s*a\s*1\s*c)|(?<![a-zA-Z])hb(?!\s*a1c|\s*a\s*1))\s*[:\s]+(\d+(?:\.\d+)?)\s*([a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
     if hb_match:
         val = hb_match.group(1)
         unit = hb_match.group(2) or "g/dL"
