@@ -113,7 +113,7 @@ def test_reference_range_strict_from_document():
 
 
 @pytest.mark.asyncio
-async def test_invalid_api_key_returns_clear_user_message():
+async def test_invalid_api_key_returns_clear_user_message(monkeypatch):
     """
     Task 5 'Done' Check:
     API key galat karke test karo, user ko saaf message mile.
@@ -121,8 +121,19 @@ async def test_invalid_api_key_returns_clear_user_message():
     1. GeminiAdapter detects the invalid key HTTP 400/401/403 and raises LLMAuthenticationError.
     2. LLMClient catches it and produces a clear, safe, patient-facing notice.
     """
+    from unittest.mock import AsyncMock
+    import httpx
+
+    # Mock invalid API key HTTP 400 response
+    mock_bad_resp = httpx.Response(
+        status_code=400,
+        text='{"error": {"code": 400, "message": "API key not valid. Please pass a valid API key.", "status": "INVALID_ARGUMENT"}}',
+        request=httpx.Request("POST", "https://generativelanguage.googleapis.com"),
+    )
+    monkeypatch.setattr(httpx.AsyncClient, "post", AsyncMock(return_value=mock_bad_resp))
+
     bad_adapter = GeminiAdapter(api_key="AIzaSy_INVALID_KEY_FOR_TESTING_12345")
-    
+
     # Direct adapter call should raise LLMAuthenticationError on invalid key
     with pytest.raises(LLMAuthenticationError) as exc_info:
         await bad_adapter.generate_explanation("Explain report", context="Test context")
@@ -131,7 +142,7 @@ async def test_invalid_api_key_returns_clear_user_message():
     # LLMClient call should catch the error and present a clean notice to the user
     client = LLMClient()
     client.adapter = bad_adapter
-    
+
     sample_findings = [
         {"testName": "Haemoglobin (Hb)", "value": "15.0", "unit": "g/dL", "referenceRange": "13 - 17", "status": "normal"}
     ]
@@ -139,7 +150,7 @@ async def test_invalid_api_key_returns_clear_user_message():
         title="CBC Report",
         findings=sample_findings,
     )
-    
+
     # Must contain clear user-facing notice and clinical fallback
     assert "Notice: The configured AI provider API key is invalid or unauthorized" in en_summary
     assert "सूचना: AI प्रोवाइडर API कुंजी अमान्य है" in hi_summary
