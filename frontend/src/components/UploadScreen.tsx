@@ -14,7 +14,7 @@ import {
   Sparkles,
   Languages,
 } from 'lucide-react';
-import { DiagnosticStep, HealthDocument, SkinAnalysisResult } from '../types';
+import { DiagnosticStep, HealthDocument, SkinAnalysisResult, Finding } from '../types';
 import { documentsApi, skinApi } from '../api';
 import { ApiError } from '../api/client';
 
@@ -47,6 +47,9 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [unclearItems, setUnclearItems] = useState<string[]>([]);
   const [analyzedDoc, setAnalyzedDoc] = useState<HealthDocument | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [editableFindings, setEditableFindings] = useState<Finding[]>([]);
+  const [savingChanges, setSavingChanges] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -64,6 +67,40 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
     startAnalysis(file, mode);
   };
 
+  const updateFindingField = (index: number, field: 'value' | 'referenceRange', val: string) => {
+    setEditableFindings((prev) => {
+      const next = [...prev];
+      next[index] = {
+        ...next[index],
+        [field]: val,
+        needs_confirmation: false,
+        confirmationStatus: 'ok',
+        needsReview: false,
+      };
+      return next;
+    });
+  };
+
+  const handleConfirmAndSave = async () => {
+    if (!analyzedDoc) return;
+    setSavingChanges(true);
+    try {
+      const updated = await documentsApi.updateDocument(analyzedDoc.id, {
+        findings: editableFindings,
+      });
+      setIsVerifying(false);
+      onViewCompletedDocument(updated);
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else {
+        setError('Failed to save verified findings');
+      }
+    } finally {
+      setSavingChanges(false);
+    }
+  };
+
   const startAnalysis = async (file: File, selectedMode: 'report' | 'prescription' | 'image') => {
     // Validate file size (20 MB limit)
     if (file.size > 20 * 1024 * 1024) {
@@ -72,6 +109,7 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
     }
 
     setAnalyzing(true);
+    setIsVerifying(false);
     setProgress(15);
     setPipelineSteps([
       { id: 1, title: 'Uploading securely', description: 'Removed EXIF metadata & encrypted transmission', status: 'active', tag: 'Active' },
@@ -102,9 +140,15 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
       setProgress(100);
       setPipelineSteps((steps) => steps.map((s) => ({ ...s, status: 'done', tag: 'Done' })));
       setAnalyzedDoc(completedDoc);
+      setEditableFindings(completedDoc.findings || []);
 
-      if (completedDoc.unclearItems && completedDoc.unclearItems.length > 0) {
-        setUnclearItems(completedDoc.unclearItems);
+      const hasNeedsConfirmation =
+        (completedDoc.findings || []).some(
+          (f) => f.needs_confirmation || f.confirmationStatus === 'needs_confirmation' || f.needsReview
+        ) || (completedDoc.unclearItems && completedDoc.unclearItems.length > 0);
+
+      if (hasNeedsConfirmation) {
+        setIsVerifying(true);
       } else {
         onViewCompletedDocument(completedDoc);
       }
@@ -378,38 +422,125 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
             </div>
           </div>
 
-          {/* Clarity Warning Card (if faint/unclear text detected) */}
-          {unclearItems.length > 0 && (
-            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 space-y-3">
-              <div className="flex items-start gap-2.5">
-                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="text-xs font-bold text-amber-900">Photo Clarity Check</h4>
-                  <p className="text-xs text-amber-700 leading-relaxed mt-0.5">
-                    Certain sections could not be verified with 100% confidence:
+          {/* Verify Before Save Screen (Task 3 & Task 4 & Frontend requirement) */}
+          {isVerifying && analyzedDoc && (
+            <div className="p-5 rounded-3xl bg-white border border-[#d8ecea] shadow-md space-y-4 animate-in fade-in duration-200">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-[#0a7075]" />
+                    <h3 className="text-sm font-extrabold text-gray-900">
+                      {language === 'hi' ? 'सुरक्षित करने से पहले रिपोर्ट के मान जांचें' : 'Verify Values Before Saving'}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    {language === 'hi'
+                      ? 'मूल पेपर रिपोर्ट से इन मानों की तुलना करें। यदि आवश्यक हो तो मान एडिट करें।'
+                      : 'Compare these extracted findings against your original paper report. Edit any value if needed before saving.'}
                   </p>
-                  <ul className="list-disc list-inside text-xs text-amber-800 mt-1 space-y-0.5">
-                    {unclearItems.map((item, idx) => (
-                      <li key={idx}>{item}</li>
-                    ))}
-                  </ul>
                 </div>
+                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-[#e0f7f6] text-[#0a7075] border border-[#a2e3de] shrink-0">
+                  {selectedFile?.name || 'Document'}
+                </span>
               </div>
-              <div className="flex items-center gap-2 pt-1">
+
+              {/* Editable Finding Rows */}
+              <div className="space-y-2.5 max-h-[50vh] overflow-y-auto pr-1">
+                {editableFindings.map((item, idx) => {
+                  const isNeedsConfirm =
+                    item.needs_confirmation ||
+                    item.confirmationStatus === 'needs_confirmation' ||
+                    item.needsReview;
+                  return (
+                    <div
+                      key={idx}
+                      className={`p-3 rounded-2xl border transition-all ${
+                        isNeedsConfirm
+                          ? 'bg-[#fff1f0] border-[#ffa39e] shadow-xs'
+                          : 'bg-[#fcfdfd] border-[#d8ecea]'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-gray-900">
+                            {language === 'hi' && item.testNameHi ? item.testNameHi : item.testName}
+                          </span>
+                          {isNeedsConfirm ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#fff1f0] text-[#cf1322] border border-[#ffa39e]">
+                              ⚠️ {language === 'hi' ? 'पुष्टि करें' : 'Please confirm'}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#dcfce7] text-[#15803d] border border-[#bbf7d0]">
+                              <CheckCircle2 className="w-3 h-3 text-[#16a34a]" />
+                              <span>{language === 'hi' ? 'सत्यापित' : 'Grounded'}</span>
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] font-bold text-gray-500 uppercase px-2 py-0.5 rounded-md bg-gray-100">
+                          {item.status}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                        <div>
+                          <label className="block text-[10.5px] font-semibold text-gray-600 mb-0.5">
+                            {language === 'hi' ? 'प्राप्त मान (Value):' : 'Observed Value:'}
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={item.value}
+                              onChange={(e) => updateFindingField(idx, 'value', e.target.value)}
+                              className="w-full px-2.5 py-1 text-xs font-semibold rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#0a7075] bg-white"
+                            />
+                            <span className="text-xs font-semibold text-gray-500 shrink-0">{item.unit}</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10.5px] font-semibold text-gray-600 mb-0.5">
+                            {language === 'hi' ? 'प्रिंटेड संदर्भ सीमा (Ref Range):' : 'Printed Ref Range:'}
+                          </label>
+                          <input
+                            type="text"
+                            value={item.referenceRange}
+                            onChange={(e) => updateFindingField(idx, 'referenceRange', e.target.value)}
+                            className="w-full px-2.5 py-1 text-xs font-semibold rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#0a7075] bg-white"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-gray-100">
                 <button
                   type="button"
                   onClick={handleRetake}
-                  className="px-3 py-1.5 bg-white border border-amber-300 text-amber-900 text-xs font-bold rounded-lg hover:bg-amber-100 transition-all"
+                  className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition-all"
                 >
-                  Retake Photo
+                  {language === 'hi' ? 'नया फोटो लें' : 'Retake Photo'}
                 </button>
+
                 <button
                   type="button"
-                  onClick={handleContinueAnyway}
-                  className="px-3 py-1.5 bg-amber-600 text-white text-xs font-bold rounded-lg hover:bg-amber-700 transition-all flex items-center gap-1"
+                  onClick={handleConfirmAndSave}
+                  disabled={savingChanges}
+                  className="px-5 py-2 bg-[#0a7075] hover:bg-[#075960] text-white text-xs font-extrabold rounded-xl shadow-md shadow-[#0a7075]/20 flex items-center gap-2 transition-all active:scale-98 disabled:opacity-50"
                 >
-                  <span>Continue Anyway</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  {savingChanges ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>{language === 'hi' ? 'सहेज रहे हैं...' : 'Saving...'}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>{language === 'hi' ? 'पुष्टि करें और सहेजें' : 'Confirm & Save'}</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </>
+                  )}
                 </button>
               </div>
             </div>

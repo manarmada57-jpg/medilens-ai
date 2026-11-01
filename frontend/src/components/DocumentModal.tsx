@@ -220,7 +220,14 @@ export const DocumentModal: React.FC<DocumentModalProps> = ({
               <div className="text-sm font-black text-gray-900 leading-tight">
                 {item.value} <span className="text-xs font-semibold text-gray-500">{item.unit}</span>
               </div>
-              <div className="mt-0.5">{statusBadge()}</div>
+              <div className="mt-0.5 flex items-center justify-end gap-1 flex-wrap">
+                {statusBadge()}
+                {(item.needs_confirmation || item.confirmationStatus === 'needs_confirmation' || item.needsReview) && (
+                  <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full uppercase bg-[#fff1f0] text-[#cf1322] border border-[#ffa39e]">
+                    {isHindi ? 'पुष्टि करें' : 'Please confirm'}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 

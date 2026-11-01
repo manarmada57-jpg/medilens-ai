@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { HealthDocument, Source } from '../types';
+import { HealthDocument, Source, Finding, ExtractedMedicine } from '../types';
 
 export interface DocumentsListResponse {
   items: HealthDocument[];
@@ -31,6 +31,20 @@ export const documentsApi = {
   deleteDocument: async (id: string): Promise<void> => {
     await apiClient<void>(`/analyze/documents/${id}`, {
       method: 'DELETE',
+    });
+  },
+
+  updateDocument: async (
+    id: string,
+    data: {
+      findings?: Finding[];
+      medicines?: ExtractedMedicine[];
+      language?: string;
+    }
+  ): Promise<HealthDocument> => {
+    return apiClient<HealthDocument>(`/analyze/documents/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
     });
   },
 

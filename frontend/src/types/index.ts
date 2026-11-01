@@ -12,6 +12,9 @@ export interface Finding {
   referenceRange: string;
   status: 'normal' | 'high' | 'low' | 'unknown' | 'elevated';
   critical?: boolean;
+  confidence?: number;
+  confirmationStatus?: 'ok' | 'needs_confirmation' | 'unreadable';
+  needs_confirmation?: boolean;
   explanation: string;
   explanationHi?: string;
   whyItMatters?: string;
@@ -42,6 +45,9 @@ export interface ExtractedMedicine {
   generalInfoHi?: string;
   commonSideEffects?: string[];
   generalCautions?: string[];
+  confidence?: number;
+  confirmationStatus?: 'ok' | 'needs_confirmation' | 'unreadable';
+  needs_confirmation?: boolean;
   unclear?: boolean;
   needsReview?: boolean;
   sources?: Source[];

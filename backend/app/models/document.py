@@ -22,6 +22,11 @@ class FindingItem(BaseModel):
     referenceRange: str = Field("", description="Report's printed normal reference interval")
     status: Literal["normal", "high", "low", "unknown", "elevated"] = "normal"
     critical: bool = False
+    confidence: float = Field(0.95, ge=0.0, le=1.0, description="Extraction confidence score from 0.0 to 1.0")
+    confirmationStatus: Literal["ok", "needs_confirmation", "unreadable"] = Field(
+        "ok", description="Grounding confirmation status: ok, needs_confirmation, unreadable"
+    )
+    needs_confirmation: bool = Field(False, description="Flag for user verification before save")
     explanation: str = Field(..., description="Plain-language educational summary of this biomarker")
     explanationHi: str | None = None
     whyItMatters: str | None = None
@@ -55,6 +60,11 @@ class ExtractedMedicine(BaseModel):
     generalInfoHi: str | None = None
     commonSideEffects: list[str] = Field(default_factory=list)
     generalCautions: list[str] = Field(default_factory=list)
+    confidence: float = Field(0.95, ge=0.0, le=1.0, description="Medicine extraction confidence score")
+    confirmationStatus: Literal["ok", "needs_confirmation", "unreadable"] = Field(
+        "ok", description="Medicine grounding status: ok, needs_confirmation, unreadable"
+    )
+    needs_confirmation: bool = Field(False, description="Flag for user verification before save")
     unclear: bool = False
     needsReview: bool = False
     sources: list[SourceItem] = Field(default_factory=list)
@@ -127,3 +137,10 @@ class DocumentListPaginatedResponse(BaseModel):
     page: int = 1
     pageSize: int = 20
     total: int = 0
+
+
+class UpdateDocumentRequest(BaseModel):
+    findings: list[FindingItem] | None = None
+    medicines: list[ExtractedMedicine] | None = None
+    language: str | None = None
+    notes: str | None = None

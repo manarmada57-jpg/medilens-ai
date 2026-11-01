@@ -8,6 +8,7 @@ interface HeaderProps {
   onCycleFontSize: () => void;
   onOpenAuth: () => void;
   onOpenMedicalHistory?: () => void;
+  onOpenConsentModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -16,6 +17,7 @@ export const Header: React.FC<HeaderProps> = ({
   onCycleFontSize,
   onOpenAuth,
   onOpenMedicalHistory,
+  onOpenConsentModal,
 }) => {
   const [showProfileMenu, setShowProfileMenu] = React.useState(false);
 
@@ -88,6 +90,19 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <span>🩺</span>
                 <span>Medical Profile & History</span>
+              </button>
+            )}
+
+            {onOpenConsentModal && (
+              <button
+                onClick={() => {
+                  setShowProfileMenu(false);
+                  onOpenConsentModal();
+                }}
+                className="w-full text-left px-3.5 py-2 text-xs text-gray-700 hover:bg-[#f0faf9] hover:text-[#0a7075] flex items-center gap-2 transition-colors font-medium"
+              >
+                <span>🛡️</span>
+                <span>Privacy & Data Rights</span>
               </button>
             )}
 

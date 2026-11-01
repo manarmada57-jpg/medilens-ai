@@ -610,19 +610,27 @@ class CBCAnalysisService:
                                     unit = sub
 
                     catalog_info = CBC_REFERENCE_CATALOG.get(test_name, {})
-                    effective_range = ref_range or catalog_info.get("default_range", "Standard clinical range")
-                    effective_val = val or "Normal"
+                    has_printed_range = bool(ref_range and ref_range.strip())
+                    effective_range: str = ref_range if (ref_range and has_printed_range) else "Not specified in report"
+                    effective_val = val or "Not specified in report"
 
-                    # Evaluate status strictly against printed range
+                    # Evaluate status strictly against printed range (never fabricate a range)
                     status_eval = "normal"
-                    if val:
+                    if val and has_printed_range:
                         status_eval = lab_validator.evaluate_status(val, effective_range)
+
+                    confidence = 0.98 if (val and has_printed_range) else (0.70 if val else 0.35)
+                    conf_status = "ok" if (val and has_printed_range) else "needs_confirmation"
+                    needs_confirm = not (val and has_printed_range)
 
                     what_is_it_en = catalog_info.get("what_is_it_en", f"{test_name} is a standard blood count parameter.")
                     what_is_it_hi = catalog_info.get("what_is_it_hi", f"{test_name} ek standard blood count parameter hai.")
 
                     # Build patient condition observation
-                    if status_eval in ("high", "elevated"):
+                    if not has_printed_range:
+                        patient_condition_en = f"Your {test_name} reading is {effective_val} {unit}. (No reference range was specified on this report)."
+                        patient_condition_hi = f"Patient ka {test_name} ({effective_val} {unit}) report par printed reference range ke bina hai."
+                    elif status_eval in ("high", "elevated"):
                         patient_condition_en = f"Your {test_name} reading ({effective_val} {unit}) is above the reference range ({effective_range})."
                         patient_condition_hi = f"Patient ka {test_name} ({effective_val} {unit}) reference range ({effective_range}) se high hai."
                     elif status_eval == "low":
@@ -640,6 +648,9 @@ class CBCAnalysisService:
                         "referenceRange": effective_range,
                         "status": status_eval,
                         "critical": False,
+                        "confidence": confidence,
+                        "confirmationStatus": conf_status,
+                        "needs_confirmation": needs_confirm,
                         "explanation": f"{patient_condition_en} {what_is_it_en}",
                         "explanationHi": f"{patient_condition_hi} {what_is_it_hi}",
                         "whyItMatters": what_is_it_en,
@@ -650,7 +661,7 @@ class CBCAnalysisService:
                         "ifHighHi": catalog_info.get("if_high_hi", []),
                         "ifLow": catalog_info.get("if_low_en", []),
                         "ifLowHi": catalog_info.get("if_low_hi", []),
-                        "needsReview": False,
+                        "needsReview": needs_confirm,
                         "sources": [
                             {
                                 "name": "MedlinePlus",
@@ -662,7 +673,8 @@ class CBCAnalysisService:
                     already_matched.add(test_name)
                     break
 
-        return findings
+        # Pass extracted findings through strict source grounding check
+        return lab_validator.verify_source_grounding(findings, text)
 
     @staticmethod
     def build_clinical_cbc_summary(

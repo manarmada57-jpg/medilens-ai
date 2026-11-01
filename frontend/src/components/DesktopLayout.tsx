@@ -32,6 +32,7 @@ interface DesktopLayoutProps {
   onCycleFontSize: () => void;
   onOpenAuth: () => void;
   onOpenMedicalHistory: () => void;
+  onOpenConsentModal?: () => void;
   onNavigateToUpload: (mode?: 'report' | 'prescription' | 'image') => void;
   onOpenSampleReport: () => void;
   children: React.ReactNode;
@@ -74,6 +75,7 @@ export const DesktopLayout: React.FC<DesktopLayoutProps> = ({
   onCycleFontSize,
   onOpenAuth,
   onOpenMedicalHistory,
+  onOpenConsentModal,
   onNavigateToUpload,
   onOpenSampleReport,
   children,
@@ -343,6 +345,19 @@ export const DesktopLayout: React.FC<DesktopLayoutProps> = ({
                   <Sparkles className="w-3.5 h-3.5 text-[#0a7075]" />
                   <span>View Sample Lab Report</span>
                 </button>
+
+                {onOpenConsentModal && (
+                  <button
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      onOpenConsentModal();
+                    }}
+                    className="w-full text-left px-3 py-2 text-xs font-medium text-gray-700 hover:bg-[#e6f5f4] hover:text-[#0a7075] rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-[#0a7075]" />
+                    <span>Privacy, Consent & Data Rights</span>
+                  </button>
+                )}
 
                 <div className="my-1 border-t border-gray-100" />
 

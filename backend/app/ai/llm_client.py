@@ -5,6 +5,7 @@ Provides deterministic grounded fallback when external API keys are not supplied
 Generates plain-language medical explanations in simple English and Hindi.
 """
 
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -13,6 +14,12 @@ import httpx
 from app.core.config import settings
 from app.core.logging import logger
 from app.services.rag import medical_rag
+
+
+class LLMAuthenticationError(Exception):
+    """Raised when the LLM provider rejects the API key or authentication credentials."""
+    pass
+
 
 SYSTEM_MEDICAL_PROMPT = """You are MediLens AI — an educational, patient-friendly medical explanation assistant.
 CRITICAL SAFETY BOUNDARIES:
@@ -46,13 +53,58 @@ class GeminiAdapter(BaseLLMAdapter):
                 {"role": "user", "parts": [{"text": f"{SYSTEM_MEDICAL_PROMPT}\n\nContext:\n{context or ''}\n\nPatient Query/Report:\n{prompt}"}]}
             ]
         }
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(url, json=payload)
-            if resp.status_code == 200:
-                data = resp.json()
-                return data["candidates"][0]["content"]["parts"][0]["text"]
-            logger.warning(f"Gemini API returned status {resp.status_code}: {resp.text}")
-            return ""
+        max_retries = 3
+        timeout = httpx.Timeout(15.0, connect=5.0)
+
+        for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    resp = await client.post(url, json=payload)
+
+                    # 1. Check for Authentication / Bad Key errors
+                    if resp.status_code in (400, 401, 403):
+                        err_text = resp.text.lower()
+                        if "api_key_invalid" in err_text or "invalid_argument" in err_text or "unregistered" in err_text or resp.status_code in (401, 403):
+                            logger.error("Gemini API authentication failed: invalid API key (HTTP %s): %s", resp.status_code, resp.text)
+                            raise LLMAuthenticationError("Invalid AI provider API key. Please verify your GEMINI_API_KEY configuration.")
+                        logger.warning("Gemini API returned status %s: %s", resp.status_code, resp.text)
+                        return ""
+
+                    # 2. Check for Success
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        candidates = data.get("candidates", [])
+                        if candidates and candidates[0].get("content", {}).get("parts"):
+                            return candidates[0]["content"]["parts"][0]["text"]
+                        return ""
+
+                    # 3. Check for Transient / Rate Limit errors (429, 500, 502, 503, 504) -> Backoff retry
+                    if resp.status_code in (429, 500, 502, 503, 504):
+                        if attempt < max_retries - 1:
+                            delay = 0.5 * (2 ** attempt)
+                            logger.info("Transient Gemini error %s. Retrying in %ss (attempt %s/%s)...", resp.status_code, delay, attempt + 1, max_retries)
+                            await asyncio.sleep(delay)
+                            continue
+                        logger.warning("Gemini API failed after %s retries with status %s", max_retries, resp.status_code)
+                        return ""
+
+                    logger.warning("Gemini API returned status %s: %s", resp.status_code, resp.text)
+                    return ""
+
+            except (httpx.TimeoutException, httpx.NetworkError) as net_err:
+                if attempt < max_retries - 1:
+                    delay = 0.5 * (2 ** attempt)
+                    logger.info("Network timeout/error during LLM call (%s). Retrying in %ss...", net_err, delay)
+                    await asyncio.sleep(delay)
+                    continue
+                logger.warning("LLM call timed out after %s retries: %s", max_retries, str(net_err))
+                return ""
+            except LLMAuthenticationError:
+                raise
+            except Exception as exc:
+                logger.warning("Unexpected LLM error: %s", str(exc))
+                return ""
+        return ""
 
 
 class LLMClient:
@@ -102,6 +154,8 @@ class LLMClient:
         # Try external AI if configured
         ai_en = ""
         ai_hi = ""
+        auth_warning_en = ""
+        auth_warning_hi = ""
         if self.adapter:
             try:
                 context_str = "Findings:\n" + "\n".join(
@@ -121,6 +175,16 @@ class LLMClient:
                 ai_hi = await self.adapter.generate_explanation(
                     f"Explain '{title}' in simple, gentle conversational Hindi (Devanagari script).",
                     context=context_str,
+                )
+            except LLMAuthenticationError as auth_err:
+                logger.error("External AI Provider authentication failure: %s", str(auth_err))
+                auth_warning_en = (
+                    "⚠️ Notice: The configured AI provider API key is invalid or unauthorized. "
+                    "MediLens AI has protected your workflow and safely generated explanations using grounded clinical reference knowledge."
+                )
+                auth_warning_hi = (
+                    "⚠️ सूचना: AI प्रोवाइडर API कुंजी अमान्य है। "
+                    "MediLens AI ने आपके सत्र को सुरक्षित रखते हुए प्रमाणित क्लिनिकल ज्ञान के आधार पर विश्लेषण प्रस्तुत किया है।"
                 )
             except Exception as e:
                 logger.warning(f"External LLM call failed, falling back to grounded RAG: {str(e)}")
@@ -233,6 +297,8 @@ class LLMClient:
                 + "\n\nNote: MediLens AI provides educational information only and does not replace medical advice or prescription from your doctor."
             )
         )
+        if auth_warning_en:
+            en_final = f"{auth_warning_en}\n\n{en_final}"
 
         hi_final = (
             (ai_hi + "\n\n") if ai_hi else (
@@ -241,6 +307,10 @@ class LLMClient:
                 + "\n\nनोट: MediLens AI केवल स्वास्थ्य शिक्षा और जानकारी के लिए है। किसी भी दवा या उपचार में बदलाव से पहले हमेशा अपने डॉक्टर से परामर्श करें।"
             )
         )
+        if auth_warning_hi:
+            hi_final = f"{auth_warning_hi}\n\n{hi_final}"
+
+        return en_final, hi_final
 
         return en_final, hi_final
 

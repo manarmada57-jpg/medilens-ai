@@ -158,3 +158,52 @@ async def test_emergency_signs_scanner(client: AsyncClient, auth_headers: dict[s
     assert "error" in data
     assert data["code"] == "EMERGENCY_DETECTED"
     assert "emergency" in data["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_patch_document_verify_before_save(client: AsyncClient, auth_headers: dict[str, str], monkeypatch):
+    """
+    Tests the Verify-before-save PATCH endpoint:
+    Allows patient to edit or confirm findings before finalizing.
+    """
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "dummy_key")
+
+    sample_report = (
+        "BLOOD TEST REPORT\n"
+        "Fasting Blood Glucose : 110 mg/dL (70 - 99)\n"
+    )
+    fake_file = io.BytesIO(sample_report.encode("utf-8"))
+    files = {"file": ("report.pdf", fake_file, "application/pdf")}
+
+    upload_resp = await client.post(
+        "/api/analyze/document",
+        headers=auth_headers,
+        files=files,
+        data={"doc_type": "lab"},
+    )
+    assert upload_resp.status_code == 201
+    doc_id = upload_resp.json()["id"]
+
+    # Verify initial value
+    get_resp = await client.get(f"/api/analyze/documents/{doc_id}", headers=auth_headers)
+    assert get_resp.status_code == 200
+    doc_data = get_resp.json()
+    assert len(doc_data["findings"]) >= 1
+
+    # Now simulate user editing / confirming value via verify-before-save
+    updated_findings = doc_data["findings"]
+    updated_findings[0]["value"] = "95"  # Corrected by user to normal value
+    updated_findings[0]["needs_confirmation"] = False
+    updated_findings[0]["confirmationStatus"] = "ok"
+
+    patch_resp = await client.patch(
+        f"/api/analyze/documents/{doc_id}",
+        headers=auth_headers,
+        json={"findings": updated_findings},
+    )
+    assert patch_resp.status_code == 200
+    patched_doc = patch_resp.json()
+    assert patched_doc["findings"][0]["value"] == "95"
+    assert patched_doc["findings"][0]["status"] == "normal"
+    assert patched_doc["findings"][0]["confirmationStatus"] == "ok"
+    assert patched_doc["findings"][0]["needs_confirmation"] is False

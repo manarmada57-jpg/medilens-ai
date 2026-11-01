@@ -12,6 +12,7 @@ import { DocumentModal } from './components/DocumentModal';
 import { PharmacyModal } from './components/PharmacyModal';
 import { AddMedicineModal } from './components/AddMedicineModal';
 import { SkinResultModal } from './components/SkinResultModal';
+import { ConsentDeleteDataModal } from './components/ConsentDeleteDataModal';
 
 // Desktop Components
 import { DesktopLayout } from './components/DesktopLayout';
@@ -87,6 +88,7 @@ export default function App() {
   const [activeSkinResult, setActiveSkinResult] = useState<SkinAnalysisResult | null>(null);
   const [showPharmacyModal, setShowPharmacyModal] = useState(false);
   const [showAddMedicineModal, setShowAddMedicineModal] = useState(false);
+  const [showConsentModal, setShowConsentModal] = useState(false);
   const [emergencyPhone, setEmergencyPhone] = useState('112');
 
   // Sync text-size scaling to root document element for rem accessibility
@@ -589,6 +591,7 @@ export default function App() {
             }
           }}
           onOpenMedicalHistory={() => setFlowStep('medical_history')}
+          onOpenConsentModal={() => setShowConsentModal(true)}
           onNavigateToUpload={handleNavigateToUpload}
           onOpenSampleReport={() => {
             if (documents.length > 0) setActiveDocument(documents[0]);
@@ -613,6 +616,7 @@ export default function App() {
                   }
                 }}
                 onOpenMedicalHistory={() => setFlowStep('medical_history')}
+                onOpenConsentModal={() => setShowConsentModal(true)}
               />
             )}
 
@@ -671,6 +675,16 @@ export default function App() {
         <AddMedicineModal
           onClose={() => setShowAddMedicineModal(false)}
           onAdd={handleAddMedicine}
+        />
+      )}
+
+      {/* 5. Privacy Consent & Delete Data Modal */}
+      {showConsentModal && (
+        <ConsentDeleteDataModal
+          isOpen={showConsentModal}
+          onClose={() => setShowConsentModal(false)}
+          userName={profile.name}
+          userEmail={profile.caregiverName || undefined}
         />
       )}
     </div>

@@ -33,6 +33,7 @@ from app.models.document import (
     MedicalTermItem,
     PipelineStep,
     SourceItem,
+    UpdateDocumentRequest,
 )
 from app.services.cbc_service import cbc_service
 from app.services.ocr import ocr_service
@@ -169,6 +170,12 @@ async def get_document(
                 referenceRange=f.get("referenceRange", ""),
                 status=f.get("status", "normal"),
                 critical=f.get("critical", False),
+                confidence=float(f.get("confidence", 0.95)),
+                confirmationStatus=f.get(
+                    "confirmationStatus",
+                    "needs_confirmation" if f.get("needs_confirmation") or f.get("needsReview") else "ok",
+                ),
+                needs_confirmation=bool(f.get("needs_confirmation", f.get("needsReview", False))),
                 explanation=f.get("explanation", ""),
                 explanationHi=f.get("explanationHi"),
                 whyItMatters=f.get("whyItMatters"),
@@ -179,7 +186,7 @@ async def get_document(
                 ifHighHi=f.get("ifHighHi", []),
                 ifLow=f.get("ifLow", []),
                 ifLowHi=f.get("ifLowHi", []),
-                needsReview=f.get("needsReview", False),
+                needsReview=bool(f.get("needsReview", f.get("needs_confirmation", False))),
                 sources=sources,
                 sourceCitation=f.get("sourceCitation"),
                 sourceUrl=f.get("sourceUrl"),
@@ -271,6 +278,55 @@ async def delete_document(
         raise NotFoundException(resource="Health Document")
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/documents/{id} & PATCH /api/analyze/documents/{id} (Verify Before Save)
+# ---------------------------------------------------------------------------
+
+
+@router.patch("/{id}", response_model=HealthDocumentResponse, summary="Update/Confirm document findings")
+@analyze_router.patch("/documents/{id}", response_model=HealthDocumentResponse, summary="Update/Confirm document findings (Alias)")
+async def update_document(
+    id: str,
+    req: UpdateDocumentRequest,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> HealthDocumentResponse:
+    """
+    Updates document findings and medicines after patient confirmation or manual edit.
+    Re-evaluates status strictly against reference ranges and updates unclear items.
+    """
+    db = get_database()
+    user_id = current_user["id"]
+    query = {"_id": ObjectId(id), "user_id": user_id} if ObjectId.is_valid(id) else {"_id": id, "user_id": user_id}
+
+    doc = await db[DOCUMENTS_COLLECTION].find_one(query)
+    if not doc:
+        raise NotFoundException(resource="Health Document")
+
+    update_fields: dict[str, Any] = {"updated_at": datetime.now(UTC)}
+
+    if req.findings is not None:
+        raw_findings = [f.model_dump() for f in req.findings]
+        for f in raw_findings:
+            # Re-evaluate status against updated values
+            if f.get("value") and f.get("referenceRange") and f.get("referenceRange") != "Not specified in report":
+                f["status"] = lab_validator.evaluate_status(f["value"], f["referenceRange"])
+        update_fields["findings"] = raw_findings
+        update_fields["unclearItems"] = [
+            f.get("testName", "Biomarker")
+            for f in raw_findings
+            if f.get("needs_confirmation") or f.get("confirmationStatus") in ("needs_confirmation", "unreadable")
+        ]
+
+    if req.medicines is not None:
+        update_fields["medicines"] = [m.model_dump() for m in req.medicines]
+
+    if req.language is not None:
+        update_fields["language"] = req.language
+
+    await db[DOCUMENTS_COLLECTION].update_one(query, {"$set": update_fields})
+    return await get_document(id, current_user=current_user)
 
 
 # ---------------------------------------------------------------------------
@@ -579,6 +635,19 @@ async def analyze_document(
         effective_kind = "prescription"
         typed_kind = "prescription"
 
+    # Step 7.5: Source Grounding & Uncertainty Engine (Task 3 & Task 4)
+    findings = lab_validator.verify_source_grounding(findings, extracted_text)
+    medicines_extracted = lab_validator.verify_medicine_grounding(medicines_extracted, extracted_text)
+    unclear_items = [
+        f.get("testName", "Biomarker")
+        for f in findings
+        if f.get("needs_confirmation") or f.get("confirmationStatus") in ("needs_confirmation", "unreadable")
+    ] + [
+        m.get("name", "Medicine")
+        for m in medicines_extracted
+        if m.get("needs_confirmation") or m.get("confirmationStatus") in ("needs_confirmation", "unreadable")
+    ]
+
     # Step 8: Build Simplified Medical Terms for Patient Education
     medical_terms_explained: list[dict[str, str]] = []
     for f in findings:
@@ -769,7 +838,7 @@ async def analyze_document(
         status="done",
         progress=100,
         pipelineSteps=_standard_pipeline_steps(True),
-        unclearItems=[],
+        unclearItems=unclear_items,
         summary=doc_record["summary"],
         findings=[FindingItem(**f) for f in findings],
         medicines=[ExtractedMedicine(**m) for m in medicines_extracted],
