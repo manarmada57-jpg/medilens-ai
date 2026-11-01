@@ -57,7 +57,7 @@ class DocumentSummaryItem(BaseModel):
     title: str
     date: str
     category: str
-    provider: str
+    provider: str = "Clinical Lab"
     badgeText: str
     badgeType: Literal["warning", "active", "success", "info"]
     type: Literal["lab", "prescription", "imaging", "note"]
@@ -178,7 +178,7 @@ async def get_dashboard_summary(
                 title=d.get("title", "Medical Document"),
                 date=d.get("date", today_str),
                 category=d.get("category", "General"),
-                provider=d.get("provider", "Clinical Lab"),
+                provider=d.get("provider") or "Clinical Lab",
                 badgeText=d.get("badgeText", "Processed"),
                 badgeType=d.get("badgeType", "info"),
                 type=d.get("type", "lab"),

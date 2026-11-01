@@ -171,14 +171,18 @@ export const DesktopHistoryScreen: React.FC<DesktopHistoryScreenProps> = ({
                 Chronic Health Conditions
               </span>
               <div className="flex flex-wrap gap-1.5">
-                {effectiveConditions.map((cond, i) => (
-                  <span
-                    key={i}
-                    className="px-2.5 py-1 rounded-lg bg-[#e0f7f6] text-[#0a7075] font-bold text-xs border border-[#a2e3de]"
-                  >
-                    {cond}
-                  </span>
-                ))}
+                {effectiveConditions.length > 0 ? (
+                  effectiveConditions.map((cond, i) => (
+                    <span
+                      key={i}
+                      className="px-2.5 py-1 rounded-lg bg-[#e0f7f6] text-[#0a7075] font-bold text-xs border border-[#a2e3de]"
+                    >
+                      {cond}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-xs text-gray-400 italic">None recorded</span>
+                )}
               </div>
             </div>
 
@@ -188,15 +192,19 @@ export const DesktopHistoryScreen: React.FC<DesktopHistoryScreenProps> = ({
                 Active Medications
               </span>
               <div className="space-y-1.5">
-                {effectiveMedicines.map((med, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50 border border-gray-100 text-xs"
-                  >
-                    <span className="font-bold text-gray-800">{med.name}</span>
-                    <span className="text-gray-500 font-medium">{med.dosage}</span>
-                  </div>
-                ))}
+                {effectiveMedicines.length > 0 ? (
+                  effectiveMedicines.map((med, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50 border border-gray-100 text-xs"
+                    >
+                      <span className="font-bold text-gray-800">{med.name}</span>
+                      <span className="text-gray-500 font-medium">{med.dosage}</span>
+                    </div>
+                  ))
+                ) : (
+                  <span className="text-xs text-gray-400 italic">None recorded</span>
+                )}
               </div>
             </div>
 
@@ -216,15 +224,16 @@ export const DesktopHistoryScreen: React.FC<DesktopHistoryScreenProps> = ({
               </div>
             </div>
 
-            {/* Caregiver Emergency Contact */}
+            {/* Caregiver Link */}
             <div className="p-3 bg-[#f8fafc] rounded-xl border border-gray-100 text-xs space-y-1">
               <span className="font-bold text-gray-700 block text-[11px] uppercase tracking-wider">
-                Emergency Caregiver
+                Caregiver Link
               </span>
-              <p className="text-gray-600">{profile.caregiverName} (Son)</p>
-              <div className="flex items-center gap-1 text-[11px] text-[#0a7075] font-semibold">
-                <PhoneCall className="w-3 h-3" /> +1 (555) 019-2834
-              </div>
+              {profile.caregiverLinked && profile.caregiverName ? (
+                <p className="text-gray-700 font-semibold">{profile.caregiverName}</p>
+              ) : (
+                <p className="text-gray-500 text-[11px]">No caregiver linked yet.</p>
+              )}
             </div>
 
             {/* Update History Button */}
