@@ -157,3 +157,4 @@ All backend routes and frontend clients strictly follow [`docs/API_CONTRACT.md`]
 - **Zero PHI Logging:** Medical history, extracted text, prompts, and tokens are never written to server logs.
 - **At-Rest Encryption:** Patient medical intake is encrypted using `MultiFernet` with key rotation support.
 - **Database Isolation:** MongoDB runs with root authentication and is not exposed to the public internet.
+# medilens-ai
