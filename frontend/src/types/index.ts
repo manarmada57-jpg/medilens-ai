@@ -16,6 +16,12 @@ export interface Finding {
   explanationHi?: string;
   whyItMatters?: string;
   whyItMattersHi?: string;
+  whatIsIt?: string;
+  whatIsItHi?: string;
+  ifHigh?: string[];
+  ifHighHi?: string[];
+  ifLow?: string[];
+  ifLowHi?: string[];
   needsReview?: boolean;
   sources?: Source[];
 }

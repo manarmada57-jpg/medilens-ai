@@ -26,6 +26,12 @@ class FindingItem(BaseModel):
     explanationHi: str | None = None
     whyItMatters: str | None = None
     whyItMattersHi: str | None = None
+    whatIsIt: str | None = None
+    whatIsItHi: str | None = None
+    ifHigh: list[str] = Field(default_factory=list)
+    ifHighHi: list[str] = Field(default_factory=list)
+    ifLow: list[str] = Field(default_factory=list)
+    ifLowHi: list[str] = Field(default_factory=list)
     needsReview: bool = False
     sources: list[SourceItem] = Field(default_factory=list)
     # Backward compatibility fields

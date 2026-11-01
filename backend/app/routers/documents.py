@@ -34,6 +34,7 @@ from app.models.document import (
     PipelineStep,
     SourceItem,
 )
+from app.services.cbc_service import cbc_service
 from app.services.ocr import ocr_service
 from app.services.pdf import pdf_extractor
 from app.services.prescription_service import prescription_extractor
@@ -172,6 +173,12 @@ async def get_document(
                 explanationHi=f.get("explanationHi"),
                 whyItMatters=f.get("whyItMatters"),
                 whyItMattersHi=f.get("whyItMattersHi"),
+                whatIsIt=f.get("whatIsIt"),
+                whatIsItHi=f.get("whatIsItHi"),
+                ifHigh=f.get("ifHigh", []),
+                ifHighHi=f.get("ifHighHi", []),
+                ifLow=f.get("ifLow", []),
+                ifLowHi=f.get("ifLowHi", []),
                 needsReview=f.get("needsReview", False),
                 sources=sources,
                 sourceCitation=f.get("sourceCitation"),
@@ -358,172 +365,213 @@ async def analyze_document(
     unclear_items: list[str] = []
     import re
 
+    # 6A: Extract Complete Blood Count (CBC) & Hematology parameters
+    cbc_findings = cbc_service.extract_cbc_findings(extracted_text)
+    findings.extend(cbc_findings)
+    existing_finding_names = {f["testName"].lower() for f in findings}
+
+    # 6B: Extract Metabolic Panel & Routine Biomarkers if not already present
     # Glucose / FBS
-    fbs_match = re.search(r"(?:fasting\s+blood\s+(?:sugar|glucose)|fbs)[:\s]+(\d+(?:\.\d+)?)\s*([a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
-    if fbs_match:
-        val = fbs_match.group(1)
-        unit = fbs_match.group(2) or "mg/dL"
-        remainder = extracted_text[fbs_match.end():fbs_match.end() + 80]
-        range_match = re.search(r"(?:ref(?:erence)?\s*range[:\s]*)?(\d+(?:\.\d+)?\s*[-–to]\s*\d+(?:\.\d+)?)", remainder, re.IGNORECASE)
-        ref_range = range_match.group(1) if range_match else "70 - 99 mg/dL"
-        status_eval = lab_validator.evaluate_status(val, ref_range)
-        norm_name = lab_validator.normalize_test_name("Fasting Blood Sugar")
-        rag_data = await medical_rag.get_grounded_explanation(norm_name)
-        findings.append(
-            {
-                "testName": norm_name,
-                "testNameHi": rag_data.get("name_hi") or "फास्टिंग ब्लड ग्लूकोज",
-                "value": val,
-                "unit": unit,
-                "referenceRange": ref_range,
-                "status": status_eval,
-                "critical": False,
-                "explanation": rag_data.get("plain_explanation", ""),
-                "explanationHi": rag_data.get("plain_explanation_hi", ""),
-                "whyItMatters": "Fasting blood sugar measures glucose regulation after an 8-hour fast.",
-                "whyItMattersHi": "यह टेस्ट 8 घंटे खाली पेट रहने के बाद शरीर की ग्लूकोज संतुलन क्षमता को मापता है।",
-                "needsReview": False,
-                "sources": [
-                    {
-                        "name": "MedlinePlus",
-                        "title": rag_data.get("source") or "Blood Glucose Test Overview",
-                        "url": rag_data.get("source_url") or "https://medlineplus.gov/lab-tests/blood-glucose-test/",
-                    }
-                ],
-                "sourceCitation": rag_data.get("source"),
-                "sourceUrl": rag_data.get("source_url"),
-            }
-        )
+    if not any("glucose" in n or "sugar" in n for n in existing_finding_names):
+        fbs_match = re.search(r"(?:fasting\s+blood\s+(?:sugar|glucose)|fbs)[:\s]+(\d+(?:\.\d+)?)\s*([a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
+        if fbs_match:
+            val = fbs_match.group(1)
+            unit = fbs_match.group(2) or "mg/dL"
+            remainder = extracted_text[fbs_match.end():fbs_match.end() + 80]
+            range_match = re.search(r"(?:ref(?:erence)?\s*range[:\s]*)?(\d+(?:\.\d+)?\s*[-–to]\s*\d+(?:\.\d+)?)", remainder, re.IGNORECASE)
+            ref_range = range_match.group(1) if range_match else "70 - 99 mg/dL"
+            status_eval = lab_validator.evaluate_status(val, ref_range)
+            norm_name = lab_validator.normalize_test_name("Fasting Blood Sugar")
+            rag_data = await medical_rag.get_grounded_explanation(norm_name)
+            findings.append(
+                {
+                    "testName": norm_name,
+                    "testNameHi": rag_data.get("name_hi") or "फास्टिंग ब्लड ग्लूकोज",
+                    "value": val,
+                    "unit": unit,
+                    "referenceRange": ref_range,
+                    "status": status_eval,
+                    "critical": False,
+                    "explanation": rag_data.get("plain_explanation", ""),
+                    "explanationHi": rag_data.get("plain_explanation_hi", ""),
+                    "whyItMatters": "Fasting blood sugar measures glucose regulation after an 8-hour fast.",
+                    "whyItMattersHi": "यह टेस्ट 8 घंटे खाली पेट रहने के बाद शरीर की ग्लूकोज संतुलन क्षमता को मापता है।",
+                    "whatIsIt": rag_data.get("definition", ""),
+                    "whatIsItHi": rag_data.get("definition_hi", ""),
+                    "ifHigh": ["Mildly above reference range may indicate slower glucose clearance."],
+                    "ifHighHi": ["खून में शुगर का स्तर अधिक होना."],
+                    "ifLow": ["Low glucose level."],
+                    "ifLowHi": ["खून में शुगर कम होना."],
+                    "needsReview": False,
+                    "sources": [
+                        {
+                            "name": "MedlinePlus",
+                            "title": rag_data.get("source") or "Blood Glucose Test Overview",
+                            "url": rag_data.get("source_url") or "https://medlineplus.gov/lab-tests/blood-glucose-test/",
+                        }
+                    ],
+                    "sourceCitation": rag_data.get("source"),
+                    "sourceUrl": rag_data.get("source_url"),
+                }
+            )
 
     # Cholesterol
-    chol_match = re.search(r"(?:total\s+cholesterol|cholesterol)[:\s]+(\d+(?:\.\d+)?)\s*([a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
-    if chol_match:
-        val = chol_match.group(1)
-        unit = chol_match.group(2) or "mg/dL"
-        remainder = extracted_text[chol_match.end():chol_match.end() + 80]
-        range_match = re.search(r"(?:ref(?:erence)?\s*range[:\s]*)?([<≤]\s*\d+(?:\.\d+)?|\d+\s*[-–to]\s*\d+)", remainder, re.IGNORECASE)
-        ref_range = range_match.group(1) if range_match else "< 200 mg/dL"
-        status_eval = lab_validator.evaluate_status(val, ref_range)
-        norm_name = lab_validator.normalize_test_name("Total Cholesterol")
-        rag_data = await medical_rag.get_grounded_explanation(norm_name)
-        findings.append(
-            {
-                "testName": norm_name,
-                "testNameHi": rag_data.get("name_hi") or "टोटल कोलेस्ट्रॉल",
-                "value": val,
-                "unit": unit,
-                "referenceRange": ref_range,
-                "status": status_eval,
-                "critical": False,
-                "explanation": rag_data.get("plain_explanation", ""),
-                "explanationHi": rag_data.get("plain_explanation_hi", ""),
-                "whyItMatters": "Total cholesterol quantifies overall lipid circulating in blood.",
-                "whyItMattersHi": "कोलेस्ट्रॉल का स्तर संतुलित रखना दिल और धमनियों की सुरक्षा के लिए जरूरी है।",
-                "needsReview": False,
-                "sources": [
-                    {
-                        "name": "MedlinePlus",
-                        "title": rag_data.get("source") or "Cholesterol Levels",
-                        "url": rag_data.get("source_url") or "https://medlineplus.gov/cholesterol.html",
-                    }
-                ],
-                "sourceCitation": rag_data.get("source"),
-                "sourceUrl": rag_data.get("source_url"),
-            }
-        )
+    if not any("cholesterol" in n for n in existing_finding_names):
+        chol_match = re.search(r"(?:total\s+cholesterol|cholesterol)[:\s]+(\d+(?:\.\d+)?)\s*([a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
+        if chol_match:
+            val = chol_match.group(1)
+            unit = chol_match.group(2) or "mg/dL"
+            remainder = extracted_text[chol_match.end():chol_match.end() + 80]
+            range_match = re.search(r"(?:ref(?:erence)?\s*range[:\s]*)?([<≤]\s*\d+(?:\.\d+)?|\d+\s*[-–to]\s*\d+)", remainder, re.IGNORECASE)
+            ref_range = range_match.group(1) if range_match else "< 200 mg/dL"
+            status_eval = lab_validator.evaluate_status(val, ref_range)
+            norm_name = lab_validator.normalize_test_name("Total Cholesterol")
+            rag_data = await medical_rag.get_grounded_explanation(norm_name)
+            findings.append(
+                {
+                    "testName": norm_name,
+                    "testNameHi": rag_data.get("name_hi") or "टोटल कोलेस्ट्रॉल",
+                    "value": val,
+                    "unit": unit,
+                    "referenceRange": ref_range,
+                    "status": status_eval,
+                    "critical": False,
+                    "explanation": rag_data.get("plain_explanation", ""),
+                    "explanationHi": rag_data.get("plain_explanation_hi", ""),
+                    "whyItMatters": "Total cholesterol quantifies overall lipid circulating in blood.",
+                    "whyItMattersHi": "कोलेस्ट्रॉल का स्तर संतुलित रखना दिल और धमनियों की सुरक्षा के लिए जरूरी है।",
+                    "whatIsIt": rag_data.get("definition", ""),
+                    "whatIsItHi": rag_data.get("definition_hi", ""),
+                    "ifHigh": ["Higher circulating lipids requiring dietary review."],
+                    "ifHighHi": ["रक्त में वसा की मात्रा बढ़ना."],
+                    "ifLow": ["Generally normal unless severe malnutrition."],
+                    "ifLowHi": ["सामान्य रूप से सुरक्षित."],
+                    "needsReview": False,
+                    "sources": [
+                        {
+                            "name": "MedlinePlus",
+                            "title": rag_data.get("source") or "Cholesterol Levels",
+                            "url": rag_data.get("source_url") or "https://medlineplus.gov/cholesterol.html",
+                        }
+                    ],
+                    "sourceCitation": rag_data.get("source"),
+                    "sourceUrl": rag_data.get("source_url"),
+                }
+            )
 
-    # Hemoglobin / Hb
-    hb_match = re.search(r"(?:hemoglobin(?!\s*a1c|\s*a\s*1\s*c)|(?<![a-zA-Z])hb(?!\s*a1c|\s*a\s*1))\s*[:\s]+(\d+(?:\.\d+)?)\s*([a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
-    if hb_match:
-        val = hb_match.group(1)
-        unit = hb_match.group(2) or "g/dL"
-        remainder = extracted_text[hb_match.end():hb_match.end() + 80]
-        range_match = re.search(r"(?:ref(?:erence)?\s*range[:\s]*)?(\d+(?:\.\d+)?\s*[-–to]\s*\d+(?:\.\d+)?)", remainder, re.IGNORECASE)
-        ref_range = range_match.group(1) if range_match else "12.0 - 16.0 g/dL"
-        status_eval = lab_validator.evaluate_status(val, ref_range)
-        norm_name = lab_validator.normalize_test_name("Hemoglobin")
-        rag_data = await medical_rag.get_grounded_explanation(norm_name)
-        findings.append(
-            {
-                "testName": norm_name,
-                "testNameHi": rag_data.get("name_hi") or "हीमोग्लोबिन",
-                "value": val,
-                "unit": unit,
-                "referenceRange": ref_range,
-                "status": status_eval,
-                "critical": False,
-                "explanation": rag_data.get("plain_explanation", "Hemoglobin carries oxygen throughout your body."),
-                "explanationHi": rag_data.get("plain_explanation_hi", "हीमोग्लोबिन लाल रक्त कोशिकाओं में ऑक्सीजन पहुँचाने वाला प्रोटीन है।"),
-                "whyItMatters": "Hemoglobin measures the oxygen-carrying capacity of red blood cells.",
-                "whyItMattersHi": "यह टेस्ट यह सुनिश्चित करता है कि आपके सभी अंगों को पर्याप्त ऑक्सीजन मिल रही है।",
-                "needsReview": False,
-                "sources": [{"name": "MedlinePlus", "title": "Hemoglobin Test", "url": "https://medlineplus.gov/lab-tests/hemoglobin-test/"}],
-                "sourceCitation": rag_data.get("source") or "MedlinePlus Medical Encyclopedia",
-                "sourceUrl": rag_data.get("source_url") or "https://medlineplus.gov/lab-tests/hemoglobin-test/",
-            }
-        )
+    # Hemoglobin / Hb (if not in CBC findings)
+    if not any("haemoglobin" in n or "hemoglobin" in n for n in existing_finding_names):
+        hb_match = re.search(r"(?:hemoglobin(?!\s*a1c|\s*a\s*1\s*c)|(?<![a-zA-Z])hb(?!\s*a1c|\s*a\s*1))\s*[:\s]+(\d+(?:\.\d+)?)\s*([a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
+        if hb_match:
+            val = hb_match.group(1)
+            unit = hb_match.group(2) or "g/dL"
+            remainder = extracted_text[hb_match.end():hb_match.end() + 80]
+            range_match = re.search(r"(?:ref(?:erence)?\s*range[:\s]*)?(\d+(?:\.\d+)?\s*[-–to]\s*\d+(?:\.\d+)?)", remainder, re.IGNORECASE)
+            ref_range = range_match.group(1) if range_match else "12.0 - 16.0 g/dL"
+            status_eval = lab_validator.evaluate_status(val, ref_range)
+            norm_name = lab_validator.normalize_test_name("Hemoglobin")
+            rag_data = await medical_rag.get_grounded_explanation(norm_name)
+            findings.append(
+                {
+                    "testName": norm_name,
+                    "testNameHi": rag_data.get("name_hi") or "हीमोग्लोबिन",
+                    "value": val,
+                    "unit": unit,
+                    "referenceRange": ref_range,
+                    "status": status_eval,
+                    "critical": False,
+                    "explanation": rag_data.get("plain_explanation", "Hemoglobin carries oxygen throughout your body."),
+                    "explanationHi": rag_data.get("plain_explanation_hi", "हीमोग्लोबिन लाल रक्त कोशिकाओं में ऑक्सीजन पहुँचाने वाला प्रोटीन है।"),
+                    "whyItMatters": "Hemoglobin measures the oxygen-carrying capacity of red blood cells.",
+                    "whyItMattersHi": "यह टेस्ट यह सुनिश्चित करता है कि आपके सभी अंगों को पर्याप्त ऑक्सीजन मिल रही है।",
+                    "whatIsIt": rag_data.get("definition", ""),
+                    "whatIsItHi": rag_data.get("definition_hi", ""),
+                    "ifHigh": ["Dehydration or respiratory compensation."],
+                    "ifHighHi": ["शरीर में पानी की कमी."],
+                    "ifLow": ["Anaemia or low iron reserves."],
+                    "ifLowHi": ["खून की कमी या एनीमिया."],
+                    "needsReview": False,
+                    "sources": [{"name": "MedlinePlus", "title": "Hemoglobin Test", "url": "https://medlineplus.gov/lab-tests/hemoglobin-test/"}],
+                    "sourceCitation": rag_data.get("source") or "MedlinePlus Medical Encyclopedia",
+                    "sourceUrl": rag_data.get("source_url") or "https://medlineplus.gov/lab-tests/hemoglobin-test/",
+                }
+            )
 
     # HbA1c
-    a1c_match = re.search(r"(?:hba1c|glycated\s+hemoglobin|a1c)[:\s]+(\d+(?:\.\d+)?)\s*(%|[a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
-    if a1c_match:
-        val = a1c_match.group(1)
-        unit = a1c_match.group(2) or "%"
-        remainder = extracted_text[a1c_match.end():a1c_match.end() + 80]
-        range_match = re.search(r"(?:ref(?:erence)?\s*range[:\s]*)?([<≤]\s*\d+(?:\.\d+)?|\d+\s*[-–to]\s*\d+)", remainder, re.IGNORECASE)
-        ref_range = range_match.group(1) if range_match else "< 5.7 %"
-        status_eval = lab_validator.evaluate_status(val, ref_range)
-        norm_name = lab_validator.normalize_test_name("Hemoglobin A1c (HbA1c)")
-        rag_data = await medical_rag.get_grounded_explanation(norm_name)
-        findings.append(
-            {
-                "testName": norm_name,
-                "testNameHi": rag_data.get("name_hi") or "HbA1c (3 महीने का औसत शुगर)",
-                "value": val,
-                "unit": unit,
-                "referenceRange": ref_range,
-                "status": status_eval,
-                "critical": False,
-                "explanation": rag_data.get("plain_explanation", "HbA1c indicates average blood glucose over 2-3 months."),
-                "explanationHi": rag_data.get("plain_explanation_hi", "HbA1c पिछले 2 से 3 महीनों का औसत ब्लड शुगर स्तर बताता है।"),
-                "whyItMatters": "HbA1c reflects average blood sugar control over the past 2 to 3 months.",
-                "whyItMattersHi": "यह दीर्घकालिक शुगर प्रबंधन की सटीक तस्वीर दिखाता है।",
-                "needsReview": False,
-                "sources": [{"name": "NIH", "title": "A1C Test (NIDDK)", "url": "https://www.niddk.nih.gov/health-information/diagnostic-tests/a1c-test"}],
-                "sourceCitation": rag_data.get("source") or "NIH NIDDK",
-                "sourceUrl": rag_data.get("source_url") or "https://www.niddk.nih.gov/health-information/diagnostic-tests/a1c-test",
-            }
-        )
+    if not any("hba1c" in n or "a1c" in n for n in existing_finding_names):
+        a1c_match = re.search(r"(?:hba1c|glycated\s+hemoglobin|a1c)[:\s]+(\d+(?:\.\d+)?)\s*(%|[a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
+        if a1c_match:
+            val = a1c_match.group(1)
+            unit = a1c_match.group(2) or "%"
+            remainder = extracted_text[a1c_match.end():a1c_match.end() + 80]
+            range_match = re.search(r"(?:ref(?:erence)?\s*range[:\s]*)?([<≤]\s*\d+(?:\.\d+)?|\d+\s*[-–to]\s*\d+)", remainder, re.IGNORECASE)
+            ref_range = range_match.group(1) if range_match else "< 5.7 %"
+            status_eval = lab_validator.evaluate_status(val, ref_range)
+            norm_name = lab_validator.normalize_test_name("Hemoglobin A1c (HbA1c)")
+            rag_data = await medical_rag.get_grounded_explanation(norm_name)
+            findings.append(
+                {
+                    "testName": norm_name,
+                    "testNameHi": rag_data.get("name_hi") or "HbA1c (3 महीने का औसत शुगर)",
+                    "value": val,
+                    "unit": unit,
+                    "referenceRange": ref_range,
+                    "status": status_eval,
+                    "critical": False,
+                    "explanation": rag_data.get("plain_explanation", "HbA1c indicates average blood glucose over 2-3 months."),
+                    "explanationHi": rag_data.get("plain_explanation_hi", "HbA1c पिछले 2 से 3 महीनों का औसत ब्लड शुगर स्तर बताता है।"),
+                    "whyItMatters": "HbA1c reflects average blood sugar control over the past 2 to 3 months.",
+                    "whyItMattersHi": "यह दीर्घकालिक शुगर प्रबंधन की सटीक तस्वीर दिखाता है।",
+                    "whatIsIt": rag_data.get("definition", ""),
+                    "whatIsItHi": rag_data.get("definition_hi", ""),
+                    "ifHigh": ["Higher average glucose over the past 90 days."],
+                    "ifHighHi": ["पिछले 3 महीनों में शुगर का औसत स्तर बढ़ना."],
+                    "ifLow": ["Generally normal or hypoglycemia risk."],
+                    "ifLowHi": ["शुगर का कम होना."],
+                    "needsReview": False,
+                    "sources": [{"name": "NIH", "title": "A1C Test (NIDDK)", "url": "https://www.niddk.nih.gov/health-information/diagnostic-tests/a1c-test"}],
+                    "sourceCitation": rag_data.get("source") or "NIH NIDDK",
+                    "sourceUrl": rag_data.get("source_url") or "https://www.niddk.nih.gov/health-information/diagnostic-tests/a1c-test",
+                }
+            )
 
     # Serum Creatinine
-    creat_match = re.search(r"(?:serum\s+creatinine|creatinine)[:\s]+(\d+(?:\.\d+)?)\s*([a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
-    if creat_match:
-        val = creat_match.group(1)
-        unit = creat_match.group(2) or "mg/dL"
-        remainder = extracted_text[creat_match.end():creat_match.end() + 80]
-        range_match = re.search(r"(?:ref(?:erence)?\s*range[:\s]*)?(\d+(?:\.\d+)?\s*[-–to]\s*\d+(?:\.\d+)?)", remainder, re.IGNORECASE)
-        ref_range = range_match.group(1) if range_match else "0.7 - 1.3 mg/dL"
-        status_eval = lab_validator.evaluate_status(val, ref_range)
-        norm_name = lab_validator.normalize_test_name("Serum Creatinine")
-        rag_data = await medical_rag.get_grounded_explanation(norm_name)
-        findings.append(
-            {
-                "testName": norm_name,
-                "testNameHi": rag_data.get("name_hi") or "सीरम क्रिएटिनिन",
-                "value": val,
-                "unit": unit,
-                "referenceRange": ref_range,
-                "status": status_eval,
-                "critical": False,
-                "explanation": rag_data.get("plain_explanation", "Creatinine measures kidney filtration efficiency."),
-                "explanationHi": rag_data.get("plain_explanation_hi", "क्रिएटिनिन किडनी द्वारा खून साफ़ करने की क्षमता को दर्शाता है।"),
-                "whyItMatters": "Creatinine is a waste product filtered by the kidneys.",
-                "whyItMattersHi": "यह गुर्दे (किडनी) के स्वास्थ्य का प्राथमिक संकेतक है।",
-                "needsReview": False,
-                "sources": [{"name": "MedlinePlus", "title": "Creatinine Test", "url": "https://medlineplus.gov/lab-tests/creatinine-test/"}],
-                "sourceCitation": rag_data.get("source") or "National Kidney Foundation & MedlinePlus",
-                "sourceUrl": rag_data.get("source_url") or "https://medlineplus.gov/lab-tests/creatinine-test/",
-            }
-        )
+    if not any("creatinine" in n for n in existing_finding_names):
+        creat_match = re.search(r"(?:serum\s+creatinine|creatinine)[:\s]+(\d+(?:\.\d+)?)\s*([a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
+        if creat_match:
+            val = creat_match.group(1)
+            unit = creat_match.group(2) or "mg/dL"
+            remainder = extracted_text[creat_match.end():creat_match.end() + 80]
+            range_match = re.search(r"(?:ref(?:erence)?\s*range[:\s]*)?(\d+(?:\.\d+)?\s*[-–to]\s*\d+(?:\.\d+)?)", remainder, re.IGNORECASE)
+            ref_range = range_match.group(1) if range_match else "0.7 - 1.3 mg/dL"
+            status_eval = lab_validator.evaluate_status(val, ref_range)
+            norm_name = lab_validator.normalize_test_name("Serum Creatinine")
+            rag_data = await medical_rag.get_grounded_explanation(norm_name)
+            findings.append(
+                {
+                    "testName": norm_name,
+                    "testNameHi": rag_data.get("name_hi") or "सीरम क्रिएटिनिन",
+                    "value": val,
+                    "unit": unit,
+                    "referenceRange": ref_range,
+                    "status": status_eval,
+                    "critical": False,
+                    "explanation": rag_data.get("plain_explanation", "Creatinine measures kidney filtration efficiency."),
+                    "explanationHi": rag_data.get("plain_explanation_hi", "क्रिएटिनिन किडनी द्वारा खून साफ़ करने की क्षमता को दर्शाता है।"),
+                    "whyItMatters": "Creatinine is a waste product filtered by the kidneys.",
+                    "whyItMattersHi": "यह गुर्दे (किडनी) के स्वास्थ्य का प्राथमिक संकेतक है।",
+                    "whatIsIt": rag_data.get("definition", ""),
+                    "whatIsItHi": rag_data.get("definition_hi", ""),
+                    "ifHigh": ["Kidneys may be filtering waste at a slower rate."],
+                    "ifHighHi": ["किडनी द्वारा अपशिष्ट छानने की गति धीमी होना."],
+                    "ifLow": ["Low muscle mass or high hydration."],
+                    "ifLowHi": ["मांसपेशियों की कमी या अधिक पानी."],
+                    "needsReview": False,
+                    "sources": [{"name": "MedlinePlus", "title": "Creatinine Test", "url": "https://medlineplus.gov/lab-tests/creatinine-test/"}],
+                    "sourceCitation": rag_data.get("source") or "National Kidney Foundation & MedlinePlus",
+                    "sourceUrl": rag_data.get("source_url") or "https://medlineplus.gov/lab-tests/creatinine-test/",
+                }
+            )
 
     # Step 7: Parse Prescription Medications
     medicines_extracted = prescription_extractor.extract_medications(extracted_text)
@@ -534,12 +582,13 @@ async def analyze_document(
     # Step 8: Build Simplified Medical Terms for Patient Education
     medical_terms_explained: list[dict[str, str]] = []
     for f in findings:
-        rag_info = await medical_rag.get_grounded_explanation(f["testName"])
+        term_en = f.get("whatIsIt") or f.get("explanation", "")
+        term_hi = f.get("whatIsItHi") or f.get("explanationHi", "")
         medical_terms_explained.append({
             "term": f["testName"],
-            "termHi": rag_info.get("name_hi") or f.get("testNameHi") or f["testName"],
-            "simpleEn": rag_info.get("term_simple_en") or rag_info.get("definition", f["testName"]),
-            "simpleHi": rag_info.get("term_simple_hi") or rag_info.get("definition_hi", f["testName"]),
+            "termHi": f.get("testNameHi") or f["testName"],
+            "simpleEn": term_en,
+            "simpleHi": term_hi,
         })
     for m in medicines_extracted:
         medical_terms_explained.append({
@@ -552,13 +601,32 @@ async def analyze_document(
     # Step 9: Build Suggested Doctor Questions (Bilingual)
     doctor_questions: list[str] = []
     doctor_questions_hi: list[str] = []
-    if findings:
+
+    # Prioritize questions for attention findings
+    for f in findings:
+        if f.get("status") in ("high", "low", "elevated"):
+            t_name = f.get("testName", "")
+            t_name_hi = f.get("testNameHi") or t_name
+            val = f.get("value", "")
+            st = f.get("status", "")
+            if t_name == "MCV":
+                doctor_questions.append(f"My MCV is {st} ({val} fL) — should we check an Iron Profile, Ferritin, or Thalassemia screen?")
+                doctor_questions_hi.append(f"मेरा MCV {st} ({val} fL) है — क्या मुझे सीरम फेरिटिन या आयरन प्रोफाइल टेस्ट कराने की जरूरत है?")
+            elif t_name == "MCHC":
+                doctor_questions.append(f"My MCHC is elevated ({val} g/dL) — do you advise a repeat CBC or peripheral blood smear?")
+                doctor_questions_hi.append(f"मेरा MCHC बढ़ा हुआ ({val} g/dL) है — क्या मुझे पेरिफेरल स्मीयर या दोबारा जांच करानी चाहिए?")
+            else:
+                doctor_questions.append(f"My {t_name} reading is {st} ({val}) — what follow-up checks or lifestyle modifications do you advise?")
+                doctor_questions_hi.append(f"मेरा {t_name_hi} परिणाम {st} ({val}) है — इस बारे में आपकी क्या सलाह है?")
+
+    if findings and len(doctor_questions) < 3:
         for f in findings:
             rag_info = await medical_rag.get_grounded_explanation(f["testName"])
-            if rag_info.get("questions_for_doctor"):
+            if rag_info.get("questions_for_doctor") and rag_info["questions_for_doctor"][0] not in doctor_questions:
                 doctor_questions.extend(rag_info["questions_for_doctor"][:1])
-            if rag_info.get("questions_for_doctor_hi"):
+            if rag_info.get("questions_for_doctor_hi") and rag_info["questions_for_doctor_hi"][0] not in doctor_questions_hi:
                 doctor_questions_hi.extend(rag_info["questions_for_doctor_hi"][:1])
+
     if medicines_extracted:
         doctor_questions.append("What specific time of day is best for each of these medicines, and are there any food interactions to avoid?")
         doctor_questions_hi.append("इन दवाओं को लेने का सबसे सही समय क्या है, और क्या मुझे किसी खास भोजन से परहेज करना चाहिए?")
@@ -575,12 +643,18 @@ async def analyze_document(
 
     # Step 10: Build Plain Language Summaries in English & Hindi
     clean_title = filename.replace(".pdf", "").replace(".png", "").replace(".jpg", "").replace("_", " ").title()
-    plain_summary_en, plain_summary_hi = await llm_client.explain_report_bilingual(
-        title=clean_title,
-        findings=findings,
-        medicines=medicines_extracted,
-        user_conditions=user_conditions,
-    )
+    if cbc_findings:
+        plain_summary_en, plain_summary_hi = cbc_service.build_clinical_cbc_summary(
+            findings=findings,
+            user_conditions=user_conditions,
+        )
+    else:
+        plain_summary_en, plain_summary_hi = await llm_client.explain_report_bilingual(
+            title=clean_title,
+            findings=findings,
+            medicines=medicines_extracted,
+            user_conditions=user_conditions,
+        )
 
     # Condition Context Strings
     condition_context_en = ""
@@ -598,8 +672,12 @@ async def analyze_document(
 
     # Fallback explanation if neither biomarkers nor known medicines were isolated
     if not findings and not medicines_extracted:
-        text_lines = [line.strip() for line in extracted_text.splitlines() if line.strip() and len(line.strip()) > 3][:6]
-        extracted_bullets_en = "\n".join(f"- {line}" for line in text_lines)
+        boilerplate_tokens = ["@", "http", "www.", ".com", ".in", "phone", "flabs", "patient id", "referred by", "collection date", "report date", "kuwngw"]
+        text_lines = [
+            line.strip() for line in extracted_text.splitlines()
+            if line.strip() and len(line.strip()) > 3 and not any(tok in line.lower() for tok in boilerplate_tokens)
+        ][:6]
+        extracted_bullets_en = "\n".join(f"- {line}" for line in text_lines) if text_lines else "- Diagnostic laboratory report text recorded"
         plain_summary_en = (
             f"MediLens AI successfully read your document '{clean_title}'.\n\n"
             f"Extracted key items:\n{extracted_bullets_en}\n\n"
@@ -616,20 +694,29 @@ async def analyze_document(
 
     # Step 11: Persist Document Record
     now = datetime.now(UTC)
-    doc_category = "Prescription" if effective_kind == "prescription" else "Diagnostic Lab"
+    doc_category = (
+        "Prescription" if effective_kind == "prescription"
+        else "Diagnostic Lab - Complete Blood Count (CBC)" if cbc_findings
+        else "Diagnostic Lab"
+    )
     has_content = bool(findings or medicines_extracted)
+    badge_text = (
+        "Explained · Full CBC" if cbc_findings
+        else "Explained · Plain Words" if has_content
+        else "Needs Review"
+    )
     doc_record = {
         "user_id": user_id,
         "title": clean_title,
         "date": now.strftime("%d %b %Y"),
         "category": doc_category,
         "provider": None,
-        "badgeText": "Explained · Plain Words" if has_content else "Needs Review",
+        "badgeText": badge_text,
         "badgeType": "success" if has_content else "warning",
         "questionsCount": len(doctor_questions),
         "type": effective_kind,
         "language": selected_language,
-        "summary": "Document analyzed against MedlinePlus and WHO medical references." if has_content else "Document processed into record.",
+        "summary": "Document analyzed against clinical hematology and MedlinePlus references." if has_content else "Document processed into record.",
         "findings": findings,
         "medicines": medicines_extracted,
         "plainLanguageSummary": plain_summary_en,

@@ -19,8 +19,12 @@ import {
   BookMarked,
   HeartPulse,
   Languages,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  Info,
 } from 'lucide-react';
-import { HealthDocument, Source } from '../types';
+import { HealthDocument, Source, Finding } from '../types';
 import { documentsApi, ApiError } from '../api';
 
 interface DocumentModalProps {
@@ -39,6 +43,7 @@ export const DocumentModal: React.FC<DocumentModalProps> = ({
   const [shareSuccess, setShareSuccess] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
+  const [expandedFindings, setExpandedFindings] = useState<Record<string, boolean>>({});
 
   // Ask question state
   const [userQuestion, setUserQuestion] = useState('');
@@ -128,6 +133,205 @@ export const DocumentModal: React.FC<DocumentModalProps> = ({
     ? (document.conditionContextHi || document.conditionContext)
     : (document.conditionContext || document.conditionContextHi);
 
+  const findings = document.findings || [];
+  const attentionFindings = findings.filter(
+    (item) => item.status === 'high' || item.status === 'low' || item.status === 'elevated' || item.critical
+  );
+  const normalFindings = findings.filter(
+    (item) => item.status !== 'high' && item.status !== 'low' && item.status !== 'elevated' && !item.critical
+  );
+
+  const isFindingExpanded = (testName: string, isAttention: boolean) => {
+    if (expandedFindings[testName] !== undefined) {
+      return expandedFindings[testName];
+    }
+    return isAttention;
+  };
+
+  const toggleFinding = (testName: string, isAttention: boolean) => {
+    const current = isFindingExpanded(testName, isAttention);
+    setExpandedFindings((prev) => ({
+      ...prev,
+      [testName]: !current,
+    }));
+  };
+
+  const renderFindingCard = (item: Finding, isAttention: boolean, idx: number) => {
+    const isExpanded = isFindingExpanded(item.testName, isAttention);
+    const displayTestName = isHindi && item.testNameHi ? item.testNameHi : item.testName;
+    const displayExplanation = isHindi && item.explanationHi ? item.explanationHi : item.explanation;
+    const displayWhatIsIt = isHindi && item.whatIsItHi ? item.whatIsItHi : item.whatIsIt;
+    const displayIfLow = isHindi && item.ifLowHi && item.ifLowHi.length > 0 ? item.ifLowHi : item.ifLow;
+    const displayIfHigh = isHindi && item.ifHighHi && item.ifHighHi.length > 0 ? item.ifHighHi : item.ifHigh;
+    const hasDetailedGuide = Boolean(
+      displayWhatIsIt ||
+      (displayIfLow && displayIfLow.length > 0) ||
+      (displayIfHigh && displayIfHigh.length > 0)
+    );
+
+    const statusBadge = () => {
+      if (item.status === 'high' || item.status === 'elevated') {
+        return (
+          <span className="inline-block text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase bg-[#fee2e2] text-[#b91c1c] border border-[#fca5a5]">
+            {isHindi ? 'अधिक (High)' : 'High'}
+          </span>
+        );
+      }
+      if (item.status === 'low') {
+        return (
+          <span className="inline-block text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase bg-[#fef3c7] text-[#92400e] border border-[#fde68a]">
+            {isHindi ? 'कम (Low)' : 'Low'}
+          </span>
+        );
+      }
+      return (
+        <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full uppercase bg-[#dcfce7] text-[#15803d] border border-[#bbf7d0]">
+          {isHindi ? 'सामान्य (Normal)' : 'Normal'}
+        </span>
+      );
+    };
+
+    return (
+      <div
+        key={`${item.testName}-${idx}`}
+        className={`rounded-xl border transition-all ${
+          isAttention
+            ? 'border-amber-300 bg-white shadow-xs ring-1 ring-amber-200/50'
+            : 'border-[#d8ecea] bg-white shadow-2xs hover:border-[#a2e3de]'
+        }`}
+      >
+        <div className="p-3.5 space-y-2">
+          {/* Card Top Row: Name, Value, Range, Status */}
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs font-black text-gray-900">{displayTestName}</span>
+                {item.testNameHi && !isHindi && (
+                  <span className="text-[10px] text-gray-400 font-medium">({item.testNameHi})</span>
+                )}
+              </div>
+              <div className="text-[11px] text-gray-500">
+                <span className="font-medium text-gray-400">{isHindi ? 'प्रिंटेड संदर्भ सीमा:' : 'Printed Ref:'}</span>{' '}
+                <span className="font-semibold text-gray-700">{item.referenceRange || 'Standard clinical range'}</span>
+              </div>
+            </div>
+
+            <div className="text-right shrink-0">
+              <div className="text-sm font-black text-gray-900 leading-tight">
+                {item.value} <span className="text-xs font-semibold text-gray-500">{item.unit}</span>
+              </div>
+              <div className="mt-0.5">{statusBadge()}</div>
+            </div>
+          </div>
+
+          {item.needsReview && (
+            <div className="text-[11px] text-amber-800 bg-amber-50 rounded-lg p-2 font-medium flex items-center gap-1.5 border border-amber-200">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-600" />
+              <span>{isHindi ? 'इस मान की तुलना अपनी कागजी रिपोर्ट से करें' : 'Check this value against your paper copy'}</span>
+            </div>
+          )}
+
+          {/* Quick summary explanation */}
+          {displayExplanation && (
+            <p className="text-[11.5px] text-gray-700 bg-[#f8fafc] rounded-lg p-2 leading-relaxed border border-gray-100 font-medium">
+              💡 {displayExplanation}
+            </p>
+          )}
+
+          {/* Detailed Clinical Accordion Toggle */}
+          {hasDetailedGuide && (
+            <button
+              type="button"
+              onClick={() => toggleFinding(item.testName, isAttention)}
+              className="w-full flex items-center justify-between text-[11px] font-bold text-[#0a7075] hover:text-[#075960] pt-1.5 border-t border-gray-100 transition-colors"
+            >
+              <span className="flex items-center gap-1">
+                <Info className="w-3.5 h-3.5" />
+                {isExpanded
+                  ? (isHindi ? 'मेडिकल विवरण छिपाएं' : 'Hide educational guide')
+                  : (isHindi ? 'विस्तृत मेडिकल विवरण देखें' : 'View educational guide')}
+              </span>
+              {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+          )}
+
+          {/* Expanded Educational Guide Details (What is it, If Low, If High) */}
+          {hasDetailedGuide && isExpanded && (
+            <div className="space-y-2 pt-2 border-t border-dashed border-gray-200 animate-in fade-in duration-150">
+              {/* What is it? */}
+              {displayWhatIsIt && (
+                <div className="p-2.5 rounded-lg bg-[#f0faf9] border border-[#a2e3de] text-xs space-y-1">
+                  <div className="font-extrabold text-[#0a7075] flex items-center gap-1.5 text-[11px] uppercase tracking-wide">
+                    <span>📖 {isHindi ? 'यह टेस्ट क्या है?' : 'What is this test?'}</span>
+                  </div>
+                  <p className="text-gray-800 leading-relaxed font-normal text-[11.5px]">{displayWhatIsIt}</p>
+                </div>
+              )}
+
+              {/* If Low */}
+              {displayIfLow && displayIfLow.length > 0 && (
+                <div
+                  className={`p-2.5 rounded-lg text-xs space-y-1 border ${
+                    item.status === 'low'
+                      ? 'bg-amber-50/80 border-amber-200'
+                      : 'bg-gray-50 border-gray-100'
+                  }`}
+                >
+                  <div className="font-bold flex items-center gap-1.5 text-amber-800 text-[11px]">
+                    <ChevronDown className="w-3.5 h-3.5 text-amber-600" />
+                    <span>{isHindi ? 'कम होने पर संभावित कारण (If Low):' : 'Possible causes if Low:'}</span>
+                  </div>
+                  <ul className="list-disc list-inside space-y-0.5 text-[11px] text-gray-700 pl-1">
+                    {displayIfLow.map((pt, pIdx) => (
+                      <li key={pIdx} className="leading-snug">{pt}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* If High */}
+              {displayIfHigh && displayIfHigh.length > 0 && (
+                <div
+                  className={`p-2.5 rounded-lg text-xs space-y-1 border ${
+                    item.status === 'high' || item.status === 'elevated'
+                      ? 'bg-rose-50/80 border-rose-200'
+                      : 'bg-gray-50 border-gray-100'
+                  }`}
+                >
+                  <div className="font-bold flex items-center gap-1.5 text-rose-800 text-[11px]">
+                    <ChevronUp className="w-3.5 h-3.5 text-rose-600" />
+                    <span>{isHindi ? 'अधिक होने पर संभावित कारण (If High):' : 'Possible causes if High:'}</span>
+                  </div>
+                  <ul className="list-disc list-inside space-y-0.5 text-[11px] text-gray-700 pl-1">
+                    {displayIfHigh.map((pt, pIdx) => (
+                      <li key={pIdx} className="leading-snug">{pt}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Reliable Source Link */}
+          {item.sources && item.sources.length > 0 && (
+            <div className="text-[10px] text-gray-400 flex items-center gap-1 pt-1 border-t border-gray-50">
+              <span>{isHindi ? 'स्रोत:' : 'Source:'}</span>
+              <a
+                href={item.sources[0].url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#0a7075] hover:underline inline-flex items-center gap-0.5 font-medium"
+              >
+                <span>{item.sources[0].name} — {item.sources[0].title}</span>
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div
       role="dialog"
@@ -135,7 +339,7 @@ export const DocumentModal: React.FC<DocumentModalProps> = ({
       aria-labelledby="doc-modal-title"
       className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4"
     >
-      <div className="w-full max-w-lg lg:max-w-3xl bg-white rounded-t-3xl sm:rounded-3xl max-h-[92vh] overflow-y-auto shadow-2xl border border-[#d8ecea] animate-in fade-in slide-in-from-bottom duration-200">
+      <div className="w-full max-w-lg lg:max-w-4xl xl:max-w-5xl bg-white rounded-t-3xl sm:rounded-3xl max-h-[92vh] overflow-y-auto shadow-2xl border border-[#d8ecea] animate-in fade-in slide-in-from-bottom duration-200">
         {/* Urgent Emergency Warning Banner (if urgentFlags non-empty) */}
         {document.urgentFlags && document.urgentFlags.length > 0 && (
           <div className="p-4 bg-red-600 text-white flex items-center gap-3">
@@ -362,75 +566,86 @@ export const DocumentModal: React.FC<DocumentModalProps> = ({
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             {/* Left Col: Extracted Biomarkers / Findings */}
-            {document.findings && document.findings.length > 0 && (
-              <div className="space-y-3">
-                <h3 className="text-xs font-bold tracking-wider text-gray-400 uppercase">
-                  {isHindi ? 'लैब टेस्ट और प्रिंटेड रेंज' : 'Extracted Biomarkers & Printed Ranges'}
-                </h3>
+            {findings.length > 0 && (
+              <div className="space-y-4">
+                {/* Section 1: Findings Requiring Attention (Abnormal MCV, MCHC, etc.) */}
+                {attentionFindings.length > 0 && (
+                  <div className="p-4 rounded-2xl border-2 border-amber-300 bg-amber-50/40 space-y-3 shadow-xs">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                        <h3 className="text-xs font-black text-amber-950 uppercase tracking-wide">
+                          {isHindi
+                            ? `⚠️ ध्यान देने योग्य निष्कर्ष (${attentionFindings.length})`
+                            : `⚠️ Findings Requiring Attention (${attentionFindings.length})`}
+                        </h3>
+                      </div>
+                      <span className="text-[10.5px] font-bold text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-200">
+                        {isHindi ? 'डॉक्टर से परामर्श आवश्यक' : 'Review with physician'}
+                      </span>
+                    </div>
 
-                <div className="space-y-2.5">
-                  {document.findings.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3.5 rounded-xl border border-[#d8ecea] bg-white shadow-2xs space-y-2"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="text-xs font-extrabold text-gray-900">
-                            {isHindi && item.testNameHi ? item.testNameHi : item.testName}
-                          </div>
-                          <div className="text-[11px] text-gray-500">
-                            {isHindi ? 'प्रिंटेड संदर्भ सीमा:' : 'Printed Reference:'}{' '}
-                            {item.referenceRange || 'Standard clinical range'}
-                          </div>
-                        </div>
+                    <p className="text-[11.5px] text-amber-900 font-medium leading-relaxed">
+                      {isHindi
+                        ? 'ये मान सामान्य संदर्भ सीमा से बाहर हैं। इन पर अपने चिकित्सक से परामर्श लें:'
+                        : 'These parameters are outside typical laboratory reference ranges. Please discuss them with your physician:'}
+                    </p>
 
-                        <div className="text-right">
-                          <div className="text-sm font-black text-gray-900">
-                            {item.value} <span className="text-xs font-normal text-gray-500">{item.unit}</span>
-                          </div>
-                          <span
-                            className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                              item.status === 'high' || item.status === 'elevated'
-                                ? 'bg-[#fee2e2] text-[#b91c1c]'
-                                : item.status === 'low'
-                                ? 'bg-[#fef3c7] text-[#92400e]'
-                                : 'bg-[#dcfce7] text-[#15803d]'
-                            }`}
-                          >
-                            {item.status}
-                          </span>
-                        </div>
+                    <div className="space-y-2.5">
+                      {attentionFindings.map((item, idx) => renderFindingCard(item, true, idx))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Section 2: Normal / In-Range Parameters */}
+                {normalFindings.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <h3 className="text-xs font-bold tracking-wider text-gray-700 uppercase">
+                          {isHindi
+                            ? `सामान्य निष्कर्ष (${normalFindings.length})`
+                            : `Normal Parameters (${normalFindings.length})`}
+                        </h3>
                       </div>
 
-                      {item.needsReview && (
-                        <div className="text-[11px] text-amber-700 bg-amber-50 rounded-md p-1.5 font-semibold">
-                          ⚠️ {isHindi ? 'इस मान की तुलना अपनी कागजी रिपोर्ट से करें' : 'Check this value against your paper copy'}
-                        </div>
-                      )}
-
-                      <p className="text-[11.5px] text-gray-600 bg-[#f8fafc] rounded-lg p-2 leading-relaxed border border-gray-100">
-                        💡 {isHindi && item.explanationHi ? item.explanationHi : item.explanation}
-                      </p>
-
-                      {/* Source Link */}
-                      {item.sources && item.sources.length > 0 && (
-                        <div className="text-[10.5px] text-gray-400 flex items-center gap-1">
-                          <span>Source:</span>
-                          <a
-                            href={item.sources[0].url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[#0a7075] hover:underline inline-flex items-center gap-0.5 font-medium"
-                          >
-                            <span>{item.sources[0].name} — {item.sources[0].title}</span>
-                            <ExternalLink className="w-2.5 h-2.5" />
-                          </a>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const allOpen = findings.reduce(
+                              (acc, f) => ({ ...acc, [f.testName]: true }),
+                              {} as Record<string, boolean>
+                            );
+                            setExpandedFindings(allOpen);
+                          }}
+                          className="text-[10.5px] text-[#0a7075] hover:underline font-semibold"
+                        >
+                          {isHindi ? 'सभी विवरण खोलें' : 'Expand all'}
+                        </button>
+                        <span className="text-gray-300">|</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const allClosed = findings.reduce(
+                              (acc, f) => ({ ...acc, [f.testName]: false }),
+                              {} as Record<string, boolean>
+                            );
+                            setExpandedFindings(allClosed);
+                          }}
+                          className="text-[10.5px] text-[#0a7075] hover:underline font-semibold"
+                        >
+                          {isHindi ? 'सभी समेटें' : 'Collapse all'}
+                        </button>
+                      </div>
                     </div>
-                  ))}
-                </div>
+
+                    <div className="space-y-2.5">
+                      {normalFindings.map((item, idx) => renderFindingCard(item, false, idx))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
