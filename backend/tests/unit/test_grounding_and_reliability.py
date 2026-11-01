@@ -4,9 +4,11 @@ and Task 5 (LLM & Provider Reliability).
 """
 
 from typing import Any
+
 import pytest
-from app.services.validation import lab_validator
+
 from app.ai.llm_client import GeminiAdapter, LLMAuthenticationError, LLMClient
+from app.services.validation import lab_validator
 
 
 def test_source_grounding_detects_wrong_or_hallucinated_value():
@@ -122,6 +124,7 @@ async def test_invalid_api_key_returns_clear_user_message(monkeypatch):
     2. LLMClient catches it and produces a clear, safe, patient-facing notice.
     """
     from unittest.mock import AsyncMock
+
     import httpx
 
     # Mock invalid API key HTTP 400 response
