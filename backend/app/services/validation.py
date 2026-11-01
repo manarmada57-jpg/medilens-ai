@@ -51,9 +51,12 @@ class LabReportValidator:
     @staticmethod
     def normalize_test_name(raw_name: str) -> str:
         clean = raw_name.strip().lower()
-        # Direct lookup or substring match
+        # 1. Exact match
+        if clean in LAB_NORMALIZATION_MAP:
+            return LAB_NORMALIZATION_MAP[clean]
+        # 2. Key is contained in the input (e.g. "fasting blood glucose" in "fasting blood glucose level")
         for key, standard_name in LAB_NORMALIZATION_MAP.items():
-            if key in clean or clean in key:
+            if key in clean:
                 return standard_name
         return raw_name.strip()
 
