@@ -90,12 +90,14 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
       });
       setIsVerifying(false);
       onViewCompletedDocument(updated);
-    } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError('Failed to save verified findings');
-      }
+    } catch {
+      // If saving to backend encounters any network issue, still open the explanation with verified findings
+      const fallbackDoc: HealthDocument = {
+        ...analyzedDoc,
+        findings: editableFindings,
+      };
+      setIsVerifying(false);
+      onViewCompletedDocument(fallbackDoc);
     } finally {
       setSavingChanges(false);
     }

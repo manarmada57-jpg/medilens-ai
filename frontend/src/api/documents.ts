@@ -44,7 +44,7 @@ export const documentsApi = {
   ): Promise<HealthDocument> => {
     return apiClient<HealthDocument>(`/analyze/documents/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify(data),
+      body: data,
     });
   },
 

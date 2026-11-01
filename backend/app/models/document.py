@@ -27,7 +27,7 @@ class FindingItem(BaseModel):
         "ok", description="Grounding confirmation status: ok, needs_confirmation, unreadable"
     )
     needs_confirmation: bool = Field(False, description="Flag for user verification before save")
-    explanation: str = Field(..., description="Plain-language educational summary of this biomarker")
+    explanation: str = Field("", description="Plain-language educational summary of this biomarker")
     explanationHi: str | None = None
     whyItMatters: str | None = None
     whyItMattersHi: str | None = None
@@ -144,3 +144,5 @@ class UpdateDocumentRequest(BaseModel):
     medicines: list[ExtractedMedicine] | None = None
     language: str | None = None
     notes: str | None = None
+
+    model_config = {"extra": "ignore"}

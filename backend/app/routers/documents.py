@@ -309,6 +309,8 @@ async def update_document(
     if req.findings is not None:
         raw_findings = [f.model_dump() for f in req.findings]
         for f in raw_findings:
+            if not f.get("explanation"):
+                f["explanation"] = f"{f.get('testName', 'Test')} observed value is {f.get('value', '')} {f.get('unit', '')}."
             # Re-evaluate status against updated values
             if f.get("value") and f.get("referenceRange") and f.get("referenceRange") != "Not specified in report":
                 f["status"] = lab_validator.evaluate_status(f["value"], f["referenceRange"])
@@ -318,6 +320,11 @@ async def update_document(
             for f in raw_findings
             if f.get("needs_confirmation") or f.get("confirmationStatus") in ("needs_confirmation", "unreadable")
         ]
+        cbc_names = [f.get("testName") for f in raw_findings]
+        if any(name in ("MCV", "MCHC", "Haemoglobin (Hb)") for name in cbc_names):
+            en_sum, hi_sum = cbc_service.build_clinical_cbc_summary(raw_findings)
+            update_fields["plainLanguageSummary"] = en_sum
+            update_fields["plainLanguageSummaryHi"] = hi_sum
 
     if req.medicines is not None:
         update_fields["medicines"] = [m.model_dump() for m in req.medicines]
