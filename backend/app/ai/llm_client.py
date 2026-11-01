@@ -2,6 +2,7 @@
 Provider-Independent LLM & Vision Client for MediLens AI.
 Supports Google Gemini, Anthropic Claude, and OpenAI via unified interface.
 Provides deterministic grounded fallback when external API keys are not supplied.
+Generates plain-language medical explanations in simple English and Hindi.
 """
 
 from abc import ABC, abstractmethod
@@ -21,6 +22,7 @@ CRITICAL SAFETY BOUNDARIES:
 4. Translate complex medical terms and lab metrics into clear, gentle English or Hindi.
 5. Emphasize printed reference ranges provided on the report.
 6. If emergency warning signs are present, prioritize immediate emergency medical care.
+7. Connect explanations to the patient's existing health history where relevant in an educational manner.
 """
 
 
@@ -65,49 +67,182 @@ class LLMClient:
         else:
             self.adapter = None
 
-    async def explain_report(self, title: str, findings: list[dict[str, Any]]) -> str:
+    async def explain_report(
+        self,
+        title: str,
+        findings: list[dict[str, Any]],
+        medicines: list[dict[str, Any]] | None = None,
+        language: str = "en",
+        user_conditions: list[str] | None = None,
+    ) -> str:
         """
-        Generates simple plain-language summary for the patient.
-        Uses verified RAG sources if LLM provider key is offline.
+        Generates simple plain-language summary for the patient in English or Hindi.
         """
-        # If external API adapter is active, query it
+        en_summary, hi_summary = await self.explain_report_bilingual(
+            title=title,
+            findings=findings,
+            medicines=medicines,
+            user_conditions=user_conditions,
+        )
+        return hi_summary if language == "hi" else en_summary
+
+    async def explain_report_bilingual(
+        self,
+        title: str,
+        findings: list[dict[str, Any]],
+        medicines: list[dict[str, Any]] | None = None,
+        user_conditions: list[str] | None = None,
+    ) -> tuple[str, str]:
+        """
+        Generates both English and Hindi plain-language summaries for seamless instant switching.
+        """
+        medicines = medicines or []
+        conditions_list = user_conditions or []
+
+        # Try external AI if configured
+        ai_en = ""
+        ai_hi = ""
         if self.adapter:
             try:
-                context_str = "\n".join([f"- {f.get('testName')}: {f.get('value')} {f.get('unit')} (Range: {f.get('referenceRange')})" for f in findings])
-                ai_text = await self.adapter.generate_explanation(f"Explain {title}", context=context_str)
-                if ai_text:
-                    return ai_text
+                context_str = "Findings:\n" + "\n".join(
+                    [f"- {f.get('testName')}: {f.get('value')} {f.get('unit')} (Ref: {f.get('referenceRange')})" for f in findings]
+                )
+                if medicines:
+                    context_str += "\nPrescribed Medicines:\n" + "\n".join(
+                        [f"- {m.get('name')} {m.get('strength')}: {m.get('frequency')} ({m.get('withFood')})" for m in medicines]
+                    )
+                if conditions_list:
+                    context_str += f"\nPatient Medical History: {', '.join(conditions_list)}"
+
+                ai_en = await self.adapter.generate_explanation(
+                    f"Explain '{title}' in simple, patient-friendly English without jargon.",
+                    context=context_str,
+                )
+                ai_hi = await self.adapter.generate_explanation(
+                    f"Explain '{title}' in simple, gentle conversational Hindi (Devanagari script).",
+                    context=context_str,
+                )
             except Exception as e:
                 logger.warning(f"External LLM call failed, falling back to grounded RAG: {str(e)}")
 
-        # Grounded RAG explanation fallback
-        summaries = []
-        for f in findings:
-            name = f.get("testName", "")
-            val = f.get("value", "")
-            unit = f.get("unit", "")
-            status = f.get("status", "normal")
-            ref_range = f.get("referenceRange", "")
-            rag_info = await medical_rag.get_grounded_explanation(name)
+        # Build Grounded RAG English Summary
+        en_blocks: list[str] = []
+        hi_blocks: list[str] = []
 
-            if status in ("high", "elevated"):
-                summaries.append(
-                    f"Your {name} reading of {val} {unit} is slightly above your lab's reference range ({ref_range}). {rag_info.get('plain_explanation')}"
+        # 1. Biomarkers / Lab Findings
+        if findings:
+            en_biomarkers: list[str] = []
+            hi_biomarkers: list[str] = []
+            for f in findings:
+                name = f.get("testName", "")
+                val = f.get("value", "")
+                unit = f.get("unit", "")
+                status = f.get("status", "normal")
+                ref_range = f.get("referenceRange", "")
+                rag_info = await medical_rag.get_grounded_explanation(name)
+
+                name_hi = rag_info.get("name_hi") or name
+                exp_en = rag_info.get("plain_explanation", "")
+                exp_hi = rag_info.get("plain_explanation_hi", exp_en)
+
+                if status in ("high", "elevated"):
+                    en_biomarkers.append(
+                        f"• {name} ({val} {unit}): Your reading is slightly above the reference range ({ref_range}). {exp_en}"
+                    )
+                    hi_biomarkers.append(
+                        f"• {name_hi} ({val} {unit}): यह स्तर सामान्य सीमा ({ref_range}) से थोड़ा सा बढ़ा हुआ है। {exp_hi}"
+                    )
+                elif status == "low":
+                    en_biomarkers.append(
+                        f"• {name} ({val} {unit}): Your reading is below the reference range ({ref_range}). {exp_en}"
+                    )
+                    hi_biomarkers.append(
+                        f"• {name_hi} ({val} {unit}): यह स्तर सामान्य सीमा ({ref_range}) से कम है। {exp_hi}"
+                    )
+                else:
+                    en_biomarkers.append(
+                        f"• {name} ({val} {unit}): Your reading is within the normal reference range ({ref_range}). {exp_en}"
+                    )
+                    hi_biomarkers.append(
+                        f"• {name_hi} ({val} {unit}): यह स्तर सामान्य सीमा ({ref_range}) के भीतर है। {exp_hi}"
+                    )
+
+            en_blocks.append("🔬 Key Lab Findings:\n" + "\n\n".join(en_biomarkers))
+            hi_blocks.append("🔬 मुख्य जांच परिणाम (लैब टेस्ट):\n" + "\n\n".join(hi_biomarkers))
+
+        # 2. Prescriptions / Medicines
+        if medicines:
+            en_meds: list[str] = []
+            hi_meds: list[str] = []
+            for m in medicines:
+                m_name = m.get("name", "Medicine")
+                m_strength = m.get("strength", "")
+                m_freq = m.get("frequency", "As directed")
+                m_food = m.get("withFood", "any")
+                m_used_en = m.get("usedFor", "")
+                m_used_hi = m.get("usedForHi", m_used_en)
+                m_info_en = m.get("generalInfo", "")
+                m_info_hi = m.get("generalInfoHi", m_info_en)
+
+                food_note_en = (
+                    "take after meals" if m_food == "after"
+                    else "take before meals on an empty stomach" if m_food == "before"
+                    else "take with meals" if m_food == "with"
+                    else "take with water"
                 )
-            elif status == "low":
-                summaries.append(
-                    f"Your {name} reading of {val} {unit} is below your lab's reference range ({ref_range}). {rag_info.get('plain_explanation')}"
-                )
-            else:
-                summaries.append(
-                    f"Your {name} reading of {val} {unit} is within the normal reference range ({ref_range}). {rag_info.get('plain_explanation')}"
+                food_note_hi = (
+                    "खाने के बाद लें" if m_food == "after"
+                    else "खाली पेट या खाने से पहले लें" if m_food == "before"
+                    else "खाने के साथ लें" if m_food == "with"
+                    else "पानी के साथ लें"
                 )
 
-        return (
-            "Here is your easy-to-understand health summary grounded in MedlinePlus and NIH guidelines:\n\n"
-            + "\n\n".join(summaries)
-            + "\n\nNote: MediLens AI is an educational platform and does not replace the diagnosis or treatment guidance of your physician."
+                en_meds.append(
+                    f"• {m_name} ({m_strength}) — {m_freq}:\n"
+                    f"  Purpose: {m_used_en}\n"
+                    f"  How to take: {m_info_en} Best rule: {food_note_en}."
+                )
+                hi_meds.append(
+                    f"• {m_name} ({m_strength}) — {m_freq}:\n"
+                    f"  उपयोग: {m_used_hi}\n"
+                    f"  लेने का तरीका: {m_info_hi} सही समय: {food_note_hi}।"
+                )
+
+            en_blocks.append("💊 Prescribed Medications:\n" + "\n\n".join(en_meds))
+            hi_blocks.append("💊 डॉक्टर द्वारा लिखी गई दवाएं:\n" + "\n\n".join(hi_meds))
+
+        # 3. Health Profile Connection
+        if conditions_list:
+            conds_str = ", ".join([c.replace("-", " ").title() for c in conditions_list])
+            en_blocks.append(
+                f"🏥 Health Profile Connection:\n"
+                f"Given your recorded medical history ({conds_str}), keeping these readings and medications aligned with "
+                f"your physician's treatment plan is key to maintaining long-term wellness and preventing complications."
+            )
+            hi_blocks.append(
+                f"🏥 आपके स्वास्थ्य रिकॉर्ड के अनुसार:\n"
+                f"आपकी प्रोफाइल में दर्ज स्थिति ({conds_str}) को ध्यान में रखते हुए, इन परिणामों और दवाओं को अपने डॉक्टर "
+                f"के निर्देशानुसार नियमित रखना आपकी सेहत को सुरक्षित रखने के लिए बेहद महत्वपूर्ण है।"
+            )
+
+        # 4. Closing Disclaimer
+        en_final = (
+            (ai_en + "\n\n") if ai_en else (
+                "Here is your easy-to-understand health summary grounded in MedlinePlus and NIH guidelines:\n\n"
+                + "\n\n".join(en_blocks)
+                + "\n\nNote: MediLens AI provides educational information only and does not replace medical advice or prescription from your doctor."
+            )
         )
+
+        hi_final = (
+            (ai_hi + "\n\n") if ai_hi else (
+                "यहाँ आपकी रिपोर्ट का आसान और सरल हिंदी सारांश दिया गया है:\n\n"
+                + "\n\n".join(hi_blocks)
+                + "\n\nनोट: MediLens AI केवल स्वास्थ्य शिक्षा और जानकारी के लिए है। किसी भी दवा या उपचार में बदलाव से पहले हमेशा अपने डॉक्टर से परामर्श करें।"
+            )
+        )
+
+        return en_final, hi_final
 
 
 llm_client = LLMClient()

@@ -1,6 +1,7 @@
 """
 Health Documents Upload, OCR Extraction, RAG Explanation & Progress Router.
 Fully compliant with Part B & Part C specifications.
+Provides patient-friendly explanations in simple English and Hindi.
 """
 
 import hashlib
@@ -21,18 +22,21 @@ from app.core.errors import (
     UnreadableDocumentException,
     ValidationException,
 )
-from app.db.indexes import DOCUMENTS_COLLECTION
+from app.core.security import field_encryptor
+from app.db.indexes import DOCUMENTS_COLLECTION, PROFILES_COLLECTION
 from app.db.mongo import get_database
 from app.models.document import (
     DocumentProgressResponse,
     ExtractedMedicine,
     FindingItem,
     HealthDocumentResponse,
+    MedicalTermItem,
     PipelineStep,
     SourceItem,
 )
 from app.services.ocr import ocr_service
 from app.services.pdf import pdf_extractor
+from app.services.prescription_service import prescription_extractor
 from app.services.rag import medical_rag
 from app.services.safety import safety_engine
 from app.services.validation import lab_validator
@@ -102,10 +106,17 @@ async def get_documents(
             "badgeType": d.get("badgeType", "active"),
             "questionsCount": d.get("questionsCount", len(d.get("doctorQuestions", []))),
             "type": d.get("type", "lab"),
+            "language": d.get("language", "en"),
             "summary": d.get("summary"),
             "findings": d.get("findings", []),
+            "medicines": d.get("medicines", []),
             "plainLanguageSummary": d.get("plainLanguageSummary"),
+            "plainLanguageSummaryHi": d.get("plainLanguageSummaryHi"),
             "doctorQuestions": d.get("doctorQuestions", []),
+            "doctorQuestionsHi": d.get("doctorQuestionsHi", []),
+            "conditionContext": d.get("conditionContext"),
+            "conditionContextHi": d.get("conditionContextHi"),
+            "medicalTermsExplained": d.get("medicalTermsExplained", []),
             "urgentFlags": d.get("urgentFlags", []),
             "unclearItems": d.get("unclearItems", []),
             "sources": d.get("sources", []),
@@ -151,13 +162,16 @@ async def get_document(
         findings.append(
             FindingItem(
                 testName=f.get("testName", "Test"),
+                testNameHi=f.get("testNameHi"),
                 value=str(f.get("value", "")),
                 unit=f.get("unit", ""),
                 referenceRange=f.get("referenceRange", ""),
                 status=f.get("status", "normal"),
                 critical=f.get("critical", False),
                 explanation=f.get("explanation", ""),
+                explanationHi=f.get("explanationHi"),
                 whyItMatters=f.get("whyItMatters"),
+                whyItMattersHi=f.get("whyItMattersHi"),
                 needsReview=f.get("needsReview", False),
                 sources=sources,
                 sourceCitation=f.get("sourceCitation"),
@@ -170,6 +184,8 @@ async def get_document(
         SourceItem(name="MedlinePlus", title="MedlinePlus Lab Tests", url="https://medlineplus.gov/lab-tests/")
     ]
 
+    terms_explained = [MedicalTermItem(**t) for t in doc.get("medicalTermsExplained", [])]
+
     return HealthDocumentResponse(
         id=str(doc["_id"]),
         title=doc.get("title", "Medical Document"),
@@ -180,6 +196,7 @@ async def get_document(
         badgeType=doc.get("badgeType", "active"),
         questionsCount=len(doc.get("doctorQuestions", [])),
         type=doc.get("type", "lab"),
+        language=doc.get("language", "en"),
         status=doc.get("status", "done"),
         progress=doc.get("progress", 100),
         pipelineSteps=pipeline_steps,
@@ -188,7 +205,12 @@ async def get_document(
         findings=findings,
         medicines=[ExtractedMedicine(**m) for m in doc.get("medicines", [])],
         plainLanguageSummary=doc.get("plainLanguageSummary"),
+        plainLanguageSummaryHi=doc.get("plainLanguageSummaryHi"),
         doctorQuestions=doc.get("doctorQuestions", []),
+        doctorQuestionsHi=doc.get("doctorQuestionsHi", []),
+        conditionContext=doc.get("conditionContext"),
+        conditionContextHi=doc.get("conditionContextHi"),
+        medicalTermsExplained=terms_explained,
         urgentFlags=doc.get("urgentFlags", []),
         sources=doc_sources,
         disclaimer=doc.get("disclaimer", "Educational health information only. Consult your doctor."),
@@ -266,19 +288,22 @@ async def analyze_document(
     Complete Document Analysis Pipeline:
     1. Validates file format and size
     2. Strips EXIF metadata
-    3. Extracts text using PyMuPDF or Tesseract OCR
+    3. Extracts text using PyMuPDF or ONNX/Tesseract OCR
     4. Evaluates safety against prompt injection and emergency signs
     5. Normalizes test names and validates printed reference ranges
-    6. Grounds findings in MedlinePlus/NIH/WHO knowledge
-    7. Saves document and returns structured explanation with sources
+    6. Extracts medications for prescriptions
+    7. Retrieves user's registered health conditions for personal context
+    8. Generates simple English and Hindi plain explanations grounded in MedlinePlus & NIH
     """
     db = get_database()
     user_id = current_user["id"]
     effective_kind = (kind or doc_type or "lab").lower()
-    # Clamp to known document types
     if effective_kind not in ("lab", "prescription", "imaging", "note"):
         effective_kind = "lab"
     typed_kind: Literal["lab", "prescription", "imaging", "note"] = effective_kind  # type: ignore[assignment]
+    selected_language = (language or "en").lower().strip()
+    if selected_language not in ("en", "hi"):
+        selected_language = "en"
 
     # Read and validate size
     file_bytes = await file.read()
@@ -297,7 +322,7 @@ async def analyze_document(
     else:
         extracted_text = ocr_service.extract_text_from_image(file_bytes)
 
-    # Step 2: Unreadable Content Check — if unreadable, store nothing and return 422
+    # Step 2: Unreadable Content Check
     if not extracted_text or not ocr_service.is_image_readable(extracted_text):
         raise UnreadableDocumentException("Please upload a clearer photo or PDF")
 
@@ -313,12 +338,26 @@ async def analyze_document(
     if not (settings.GEMINI_API_KEY or settings.ANTHROPIC_API_KEY or settings.OPENAI_API_KEY):
         raise FeatureUnavailableException("Document analysis is temporarily unavailable: no AI provider configured")
 
-    # Step 4: Parse Biomarkers & Validate Printed Reference Ranges dynamically
+    # Step 5: Retrieve User's Registered Medical Conditions for Personal Context
+    user_conditions: list[str] = []
+    try:
+        profile_doc = await db[PROFILES_COLLECTION].find_one({"user_id": user_id})
+        if profile_doc and profile_doc.get("medical_history_encrypted"):
+            decrypted_hist = field_encryptor.decrypt(
+                profile_doc["medical_history_encrypted"],
+                user_id=user_id,
+                as_json=True,
+            )
+            if isinstance(decrypted_hist, dict):
+                user_conditions = [str(c) for c in decrypted_hist.get("conditions", []) if c]
+    except Exception:
+        user_conditions = []
+
+    # Step 6: Parse Biomarkers & Validate Printed Reference Ranges dynamically
     findings: list[dict[str, Any]] = []
     unclear_items: list[str] = []
-
-    # Dynamic regex matching for recognized lab tests
     import re
+
     # Glucose / FBS
     fbs_match = re.search(r"(?:fasting\s+blood\s+(?:sugar|glucose)|fbs)[:\s]+(\d+(?:\.\d+)?)\s*([a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
     if fbs_match:
@@ -333,13 +372,16 @@ async def analyze_document(
         findings.append(
             {
                 "testName": norm_name,
+                "testNameHi": rag_data.get("name_hi") or "फास्टिंग ब्लड ग्लूकोज",
                 "value": val,
                 "unit": unit,
                 "referenceRange": ref_range,
                 "status": status_eval,
                 "critical": False,
                 "explanation": rag_data.get("plain_explanation", ""),
+                "explanationHi": rag_data.get("plain_explanation_hi", ""),
                 "whyItMatters": "Fasting blood sugar measures glucose regulation after an 8-hour fast.",
+                "whyItMattersHi": "यह टेस्ट 8 घंटे खाली पेट रहने के बाद शरीर की ग्लूकोज संतुलन क्षमता को मापता है।",
                 "needsReview": False,
                 "sources": [
                     {
@@ -367,13 +409,16 @@ async def analyze_document(
         findings.append(
             {
                 "testName": norm_name,
+                "testNameHi": rag_data.get("name_hi") or "टोटल कोलेस्ट्रॉल",
                 "value": val,
                 "unit": unit,
                 "referenceRange": ref_range,
                 "status": status_eval,
                 "critical": False,
                 "explanation": rag_data.get("plain_explanation", ""),
+                "explanationHi": rag_data.get("plain_explanation_hi", ""),
                 "whyItMatters": "Total cholesterol quantifies overall lipid circulating in blood.",
+                "whyItMattersHi": "कोलेस्ट्रॉल का स्तर संतुलित रखना दिल और धमनियों की सुरक्षा के लिए जरूरी है।",
                 "needsReview": False,
                 "sources": [
                     {
@@ -387,7 +432,7 @@ async def analyze_document(
             }
         )
 
-    # Hemoglobin / Hb (exclude HbA1c variants)
+    # Hemoglobin / Hb
     hb_match = re.search(r"(?:hemoglobin(?!\s*a1c|\s*a\s*1\s*c)|(?<![a-zA-Z])hb(?!\s*a1c|\s*a\s*1))\s*[:\s]+(\d+(?:\.\d+)?)\s*([a-zA-Z/%]+)?", extracted_text, re.IGNORECASE)
     if hb_match:
         val = hb_match.group(1)
@@ -401,13 +446,16 @@ async def analyze_document(
         findings.append(
             {
                 "testName": norm_name,
+                "testNameHi": rag_data.get("name_hi") or "हीमोग्लोबिन",
                 "value": val,
                 "unit": unit,
                 "referenceRange": ref_range,
                 "status": status_eval,
                 "critical": False,
                 "explanation": rag_data.get("plain_explanation", "Hemoglobin carries oxygen throughout your body."),
+                "explanationHi": rag_data.get("plain_explanation_hi", "हीमोग्लोबिन लाल रक्त कोशिकाओं में ऑक्सीजन पहुँचाने वाला प्रोटीन है।"),
                 "whyItMatters": "Hemoglobin measures the oxygen-carrying capacity of red blood cells.",
+                "whyItMattersHi": "यह टेस्ट यह सुनिश्चित करता है कि आपके सभी अंगों को पर्याप्त ऑक्सीजन मिल रही है।",
                 "needsReview": False,
                 "sources": [{"name": "MedlinePlus", "title": "Hemoglobin Test", "url": "https://medlineplus.gov/lab-tests/hemoglobin-test/"}],
                 "sourceCitation": rag_data.get("source") or "MedlinePlus Medical Encyclopedia",
@@ -429,13 +477,16 @@ async def analyze_document(
         findings.append(
             {
                 "testName": norm_name,
+                "testNameHi": rag_data.get("name_hi") or "HbA1c (3 महीने का औसत शुगर)",
                 "value": val,
                 "unit": unit,
                 "referenceRange": ref_range,
                 "status": status_eval,
                 "critical": False,
                 "explanation": rag_data.get("plain_explanation", "HbA1c indicates average blood glucose over 2-3 months."),
+                "explanationHi": rag_data.get("plain_explanation_hi", "HbA1c पिछले 2 से 3 महीनों का औसत ब्लड शुगर स्तर बताता है।"),
                 "whyItMatters": "HbA1c reflects average blood sugar control over the past 2 to 3 months.",
+                "whyItMattersHi": "यह दीर्घकालिक शुगर प्रबंधन की सटीक तस्वीर दिखाता है।",
                 "needsReview": False,
                 "sources": [{"name": "NIH", "title": "A1C Test (NIDDK)", "url": "https://www.niddk.nih.gov/health-information/diagnostic-tests/a1c-test"}],
                 "sourceCitation": rag_data.get("source") or "NIH NIDDK",
@@ -457,13 +508,16 @@ async def analyze_document(
         findings.append(
             {
                 "testName": norm_name,
+                "testNameHi": rag_data.get("name_hi") or "सीरम क्रिएटिनिन",
                 "value": val,
                 "unit": unit,
                 "referenceRange": ref_range,
                 "status": status_eval,
                 "critical": False,
-                "explanation": rag_data.get("plain_explanation", "Creatinine measures kidney function."),
+                "explanation": rag_data.get("plain_explanation", "Creatinine measures kidney filtration efficiency."),
+                "explanationHi": rag_data.get("plain_explanation_hi", "क्रिएटिनिन किडनी द्वारा खून साफ़ करने की क्षमता को दर्शाता है।"),
                 "whyItMatters": "Creatinine is a waste product filtered by the kidneys.",
+                "whyItMattersHi": "यह गुर्दे (किडनी) के स्वास्थ्य का प्राथमिक संकेतक है।",
                 "needsReview": False,
                 "sources": [{"name": "MedlinePlus", "title": "Creatinine Test", "url": "https://medlineplus.gov/lab-tests/creatinine-test/"}],
                 "sourceCitation": rag_data.get("source") or "National Kidney Foundation & MedlinePlus",
@@ -471,52 +525,126 @@ async def analyze_document(
             }
         )
 
+    # Step 7: Parse Prescription Medications
+    medicines_extracted = prescription_extractor.extract_medications(extracted_text)
+    if medicines_extracted and effective_kind == "lab" and not findings:
+        effective_kind = "prescription"
+        typed_kind = "prescription"
+
+    # Step 8: Build Simplified Medical Terms for Patient Education
+    medical_terms_explained: list[dict[str, str]] = []
+    for f in findings:
+        rag_info = await medical_rag.get_grounded_explanation(f["testName"])
+        medical_terms_explained.append({
+            "term": f["testName"],
+            "termHi": rag_info.get("name_hi") or f.get("testNameHi") or f["testName"],
+            "simpleEn": rag_info.get("term_simple_en") or rag_info.get("definition", f["testName"]),
+            "simpleHi": rag_info.get("term_simple_hi") or rag_info.get("definition_hi", f["testName"]),
+        })
+    for m in medicines_extracted:
+        medical_terms_explained.append({
+            "term": m["name"],
+            "termHi": m["name"],
+            "simpleEn": m["usedFor"] or "Prescribed medication",
+            "simpleHi": m.get("usedForHi") or "डॉक्टर द्वारा लिखी गई दवा",
+        })
+
+    # Step 9: Build Suggested Doctor Questions (Bilingual)
     doctor_questions: list[str] = []
+    doctor_questions_hi: list[str] = []
     if findings:
-        clean_title = filename.replace(".pdf", "").replace(".png", "").replace(".jpg", "").replace("_", " ").title()
-        plain_summary = await llm_client.explain_report(clean_title, findings)
-        doctor_questions = [
-            f"What do my {findings[0]['testName']} results indicate for my overall health?",
-            "What lifestyle or dietary adjustments do you advise based on this panel?",
-        ]
-    else:
-        clean_title = filename.replace(".pdf", "").replace(".png", "").replace(".jpg", "").replace("_", " ").title()
-        text_lines = [line.strip() for line in extracted_text.splitlines() if line.strip() and len(line.strip()) > 3][:8]
-        extracted_bullets = "\n".join(f"- {line}" for line in text_lines[:6])
-        plain_summary = (
-            f"MediLens AI successfully processed your document '{clean_title}'.\n\n"
-            f"Key items extracted from document:\n{extracted_bullets}\n\n"
-            "This document has been safely read and organized into your medical history. "
-            "Because specific reference ranges were not detected in a standard format, "
-            "please review these extracted items with your healthcare provider for clinical evaluation."
-        )
+        for f in findings:
+            rag_info = await medical_rag.get_grounded_explanation(f["testName"])
+            if rag_info.get("questions_for_doctor"):
+                doctor_questions.extend(rag_info["questions_for_doctor"][:1])
+            if rag_info.get("questions_for_doctor_hi"):
+                doctor_questions_hi.extend(rag_info["questions_for_doctor_hi"][:1])
+    if medicines_extracted:
+        doctor_questions.append("What specific time of day is best for each of these medicines, and are there any food interactions to avoid?")
+        doctor_questions_hi.append("इन दवाओं को लेने का सबसे सही समय क्या है, और क्या मुझे किसी खास भोजन से परहेज करना चाहिए?")
+
+    if not doctor_questions:
         doctor_questions = [
             "Could you explain the main clinical takeaways from this document for my care plan?",
-            "Are there any specific follow-up lab tests or routine screenings you advise based on this report?",
+            "What lifestyle or dietary adjustments do you advise based on this panel?",
+        ]
+        doctor_questions_hi = [
+            "इस रिपोर्ट के आधार पर मेरे स्वास्थ्य और इलाज के बारे में आपकी क्या सलाह है?",
+            "मेरी सेहत को बेहतर बनाने के लिए मुझे खान-पान और दिनचर्या में क्या बदलाव करने चाहिए?",
         ]
 
-    # Step 6: Persist Document Record
+    # Step 10: Build Plain Language Summaries in English & Hindi
+    clean_title = filename.replace(".pdf", "").replace(".png", "").replace(".jpg", "").replace("_", " ").title()
+    plain_summary_en, plain_summary_hi = await llm_client.explain_report_bilingual(
+        title=clean_title,
+        findings=findings,
+        medicines=medicines_extracted,
+        user_conditions=user_conditions,
+    )
+
+    # Condition Context Strings
+    condition_context_en = ""
+    condition_context_hi = ""
+    if user_conditions:
+        cond_names = ", ".join([c.replace("-", " ").title() for c in user_conditions])
+        condition_context_en = (
+            f"Grounded in your medical history of {cond_names}, keeping these metrics balanced helps support "
+            f"your cardiovascular and metabolic wellness."
+        )
+        condition_context_hi = (
+            f"आपकी प्रोफाइल में दर्ज {cond_names} को ध्यान में रखते हुए, इन परिणामों और दवाओं को संतुलित रखना "
+            f"आपकी दीर्घकालिक सेहत के लिए बहुत आवश्यक है।"
+        )
+
+    # Fallback explanation if neither biomarkers nor known medicines were isolated
+    if not findings and not medicines_extracted:
+        text_lines = [line.strip() for line in extracted_text.splitlines() if line.strip() and len(line.strip()) > 3][:6]
+        extracted_bullets_en = "\n".join(f"- {line}" for line in text_lines)
+        plain_summary_en = (
+            f"MediLens AI successfully read your document '{clean_title}'.\n\n"
+            f"Extracted key items:\n{extracted_bullets_en}\n\n"
+            "This document has been safely processed into your medical history. "
+            "Because specific reference ranges were not detected in a standard format, "
+            "please review these items with your physician."
+        )
+        plain_summary_hi = (
+            f"MediLens AI ने आपके दस्तावेज़ '{clean_title}' को सफलतापूर्वक पढ़ लिया है।\n\n"
+            f"दस्तावेज़ से मुख्य बिंदु:\n{extracted_bullets_en}\n\n"
+            "यह दस्तावेज़ आपकी मेडिकल हिस्ट्री में सुरक्षित रूप से जोड़ दिया गया है। "
+            "कृपया इन मुख्य बिंदुओं की समीक्षा अपने डॉक्टर के साथ करें।"
+        )
+
+    # Step 11: Persist Document Record
     now = datetime.now(UTC)
+    doc_category = "Prescription" if effective_kind == "prescription" else "Diagnostic Lab"
+    has_content = bool(findings or medicines_extracted)
     doc_record = {
         "user_id": user_id,
         "title": clean_title,
         "date": now.strftime("%d %b %Y"),
-        "category": "Diagnostic Lab" if effective_kind == "lab" else "Prescription",
+        "category": doc_category,
         "provider": None,
-        "badgeText": "Explained · Plain Words" if findings else "Needs Review",
-        "badgeType": "success" if findings else "warning",
+        "badgeText": "Explained · Plain Words" if has_content else "Needs Review",
+        "badgeType": "success" if has_content else "warning",
         "questionsCount": len(doctor_questions),
         "type": effective_kind,
-        "summary": "Document analyzed against MedlinePlus and WHO medical references." if findings else "Document processed with zero recognized biomarkers.",
+        "language": selected_language,
+        "summary": "Document analyzed against MedlinePlus and WHO medical references." if has_content else "Document processed into record.",
         "findings": findings,
-        "plainLanguageSummary": plain_summary,
+        "medicines": medicines_extracted,
+        "plainLanguageSummary": plain_summary_en,
+        "plainLanguageSummaryHi": plain_summary_hi,
         "doctorQuestions": doctor_questions,
+        "doctorQuestionsHi": doctor_questions_hi,
+        "conditionContext": condition_context_en,
+        "conditionContextHi": condition_context_hi,
+        "medicalTermsExplained": medical_terms_explained,
         "urgentFlags": [],
         "unclearItems": unclear_items,
         "pipelineSteps": [s.model_dump() for s in _standard_pipeline_steps(True)],
         "sources": [
-            {"name": "MedlinePlus", "title": "MedlinePlus Lab Tests", "url": "https://medlineplus.gov/lab-tests/"},
-            {"name": "NIH", "title": "National Institutes of Health Health Information", "url": "https://www.nih.gov/"},
+            {"name": "MedlinePlus", "title": "MedlinePlus Lab Tests & Drugs", "url": "https://medlineplus.gov/"},
+            {"name": "NIH", "title": "National Institutes of Health", "url": "https://www.nih.gov/"},
         ],
         "disclaimer": (
             "MediLens AI provides health education only and does NOT constitute medical diagnosis or prescription. "
@@ -535,6 +663,10 @@ async def analyze_document(
     if async_mode:
         return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content={"id": doc_id})
 
+    # Return primary summary based on chosen language
+    primary_summary = plain_summary_hi if selected_language == "hi" else plain_summary_en
+    primary_questions = doctor_questions_hi if selected_language == "hi" else doctor_questions
+
     # Sync mode returns full DocumentDetail
     return HealthDocumentResponse(
         id=doc_id,
@@ -544,16 +676,23 @@ async def analyze_document(
         provider=doc_record["provider"],
         badgeText=doc_record["badgeText"],
         badgeType=doc_record["badgeType"],
-        questionsCount=2,
+        questionsCount=len(primary_questions),
         type=typed_kind,
+        language=selected_language,
         status="done",
         progress=100,
         pipelineSteps=_standard_pipeline_steps(True),
         unclearItems=[],
         summary=doc_record["summary"],
         findings=[FindingItem(**f) for f in findings],
-        plainLanguageSummary=plain_summary,
-        doctorQuestions=doc_record["doctorQuestions"],
+        medicines=[ExtractedMedicine(**m) for m in medicines_extracted],
+        plainLanguageSummary=primary_summary,
+        plainLanguageSummaryHi=plain_summary_hi,
+        doctorQuestions=primary_questions,
+        doctorQuestionsHi=doctor_questions_hi,
+        conditionContext=condition_context_en,
+        conditionContextHi=condition_context_hi,
+        medicalTermsExplained=[MedicalTermItem(**t) for t in medical_terms_explained],
         urgentFlags=[],
         sources=[SourceItem(**s) for s in doc_record["sources"]],
         disclaimer=doc_record["disclaimer"],

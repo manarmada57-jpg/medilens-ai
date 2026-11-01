@@ -12,6 +12,7 @@ import {
   RefreshCw,
   AlertCircle,
   Sparkles,
+  Languages,
 } from 'lucide-react';
 import { DiagnosticStep, HealthDocument, SkinAnalysisResult } from '../types';
 import { documentsApi, skinApi } from '../api';
@@ -37,6 +38,7 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
   initialFile = null,
 }) => {
   const [mode, setMode] = useState<'report' | 'prescription' | 'image'>(initialMode);
+  const [language, setLanguage] = useState<'en' | 'hi'>('en');
   const [selectedFile, setSelectedFile] = useState<File | null>(initialFile);
   const [isDragging, setIsDragging] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -93,6 +95,7 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
 
       const result = await documentsApi.analyzeDocument(file, {
         kind: selectedMode === 'prescription' ? 'prescription' : 'report',
+        language: language,
       });
 
       const completedDoc = result as HealthDocument;
@@ -158,15 +161,39 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
           <span>MediLens AI</span>
         </button>
 
-        <button
-          onClick={onCycleFontSize}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#daf1ef] hover:bg-[#cbebe8] text-[#0a7075] text-xs font-semibold border border-[#b2e2de] transition-all"
-        >
-          <span className="font-extrabold text-[12px]">Tt</span>
-          <span className="text-[11px] font-bold">
-            {fontSize === 'normal' ? 'A+ Text' : fontSize === 'large' ? 'A++ Text' : 'A Text'}
-          </span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Language Selector */}
+          <div className="flex items-center bg-gray-100 p-0.5 rounded-full border border-gray-200">
+            <button
+              type="button"
+              onClick={() => setLanguage('en')}
+              className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition-all ${
+                language === 'en' ? 'bg-[#0a7075] text-white shadow-xs' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              English
+            </button>
+            <button
+              type="button"
+              onClick={() => setLanguage('hi')}
+              className={`px-2.5 py-1 text-[11px] font-bold rounded-full transition-all ${
+                language === 'hi' ? 'bg-[#0a7075] text-white shadow-xs' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              हिंदी
+            </button>
+          </div>
+
+          <button
+            onClick={onCycleFontSize}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#daf1ef] hover:bg-[#cbebe8] text-[#0a7075] text-xs font-semibold border border-[#b2e2de] transition-all"
+          >
+            <span className="font-extrabold text-[12px]">Tt</span>
+            <span className="text-[11px] font-bold">
+              {fontSize === 'normal' ? 'A+ Text' : fontSize === 'large' ? 'A++ Text' : 'A Text'}
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* Mode Selector Tabs */}

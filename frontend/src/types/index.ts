@@ -6,13 +6,16 @@ export interface Source {
 
 export interface Finding {
   testName: string;
+  testNameHi?: string;
   value: string;
   unit: string;
   referenceRange: string;
   status: 'normal' | 'high' | 'low' | 'unknown' | 'elevated';
   critical?: boolean;
   explanation: string;
+  explanationHi?: string;
   whyItMatters?: string;
+  whyItMattersHi?: string;
   needsReview?: boolean;
   sources?: Source[];
 }
@@ -26,13 +29,23 @@ export interface ExtractedMedicine {
   withFood?: 'before' | 'after' | 'with' | 'any' | null;
   durationDays?: number | null;
   doctorInstructions?: string | null;
+  doctorInstructionsHi?: string | null;
   usedFor?: string;
+  usedForHi?: string;
   generalInfo?: string;
+  generalInfoHi?: string;
   commonSideEffects?: string[];
   generalCautions?: string[];
   unclear?: boolean;
   needsReview?: boolean;
   sources?: Source[];
+}
+
+export interface MedicalTerm {
+  term: string;
+  termHi?: string;
+  simpleEn: string;
+  simpleHi: string;
 }
 
 export interface DiagnosticStep {
@@ -53,6 +66,7 @@ export interface HealthDocument {
   badgeType: 'warning' | 'active' | 'success' | 'info';
   questionsCount?: number;
   type: 'lab' | 'prescription' | 'imaging' | 'note';
+  language?: string;
   status?: 'processing' | 'done' | 'completed' | 'failed';
   progress?: number;
   pipelineSteps?: DiagnosticStep[];
@@ -61,7 +75,12 @@ export interface HealthDocument {
   findings?: Finding[];
   medicines?: ExtractedMedicine[];
   plainLanguageSummary?: string;
+  plainLanguageSummaryHi?: string;
   doctorQuestions?: string[];
+  doctorQuestionsHi?: string[];
+  conditionContext?: string;
+  conditionContextHi?: string;
+  medicalTermsExplained?: MedicalTerm[];
   urgentFlags?: string[];
   sources?: Source[];
   disclaimer?: string;

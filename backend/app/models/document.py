@@ -16,13 +16,16 @@ class SourceItem(BaseModel):
 
 class FindingItem(BaseModel):
     testName: str = Field(..., description="Standardized or printed lab test name")
+    testNameHi: str | None = None
     value: str = Field(..., description="Observed patient test value")
     unit: str = Field("", description="Measurement unit (e.g., 'mg/dL', 'mmol/L')")
     referenceRange: str = Field("", description="Report's printed normal reference interval")
     status: Literal["normal", "high", "low", "unknown", "elevated"] = "normal"
     critical: bool = False
     explanation: str = Field(..., description="Plain-language educational summary of this biomarker")
+    explanationHi: str | None = None
     whyItMatters: str | None = None
+    whyItMattersHi: str | None = None
     needsReview: bool = False
     sources: list[SourceItem] = Field(default_factory=list)
     # Backward compatibility fields
@@ -39,13 +42,23 @@ class ExtractedMedicine(BaseModel):
     withFood: Literal["before", "after", "with", "any"] | None = None
     durationDays: int | None = None
     doctorInstructions: str | None = None
+    doctorInstructionsHi: str | None = None
     usedFor: str | None = None
+    usedForHi: str | None = None
     generalInfo: str | None = None
+    generalInfoHi: str | None = None
     commonSideEffects: list[str] = Field(default_factory=list)
     generalCautions: list[str] = Field(default_factory=list)
     unclear: bool = False
     needsReview: bool = False
     sources: list[SourceItem] = Field(default_factory=list)
+
+
+class MedicalTermItem(BaseModel):
+    term: str
+    termHi: str | None = None
+    simpleEn: str
+    simpleHi: str
 
 
 class PipelineStep(BaseModel):
@@ -66,6 +79,7 @@ class HealthDocumentResponse(BaseModel):
     badgeType: Literal["warning", "active", "success", "info"] = "active"
     questionsCount: int = 0
     type: Literal["lab", "prescription", "imaging", "note"] = "lab"
+    language: str = "en"
     status: Literal["processing", "done", "completed", "failed"] = "done"
     progress: int = 100
     pipelineSteps: list[PipelineStep] = Field(default_factory=list)
@@ -74,7 +88,12 @@ class HealthDocumentResponse(BaseModel):
     findings: list[FindingItem] = Field(default_factory=list)
     medicines: list[ExtractedMedicine] = Field(default_factory=list)
     plainLanguageSummary: str | None = None
+    plainLanguageSummaryHi: str | None = None
     doctorQuestions: list[str] = Field(default_factory=list)
+    doctorQuestionsHi: list[str] = Field(default_factory=list)
+    conditionContext: str | None = None
+    conditionContextHi: str | None = None
+    medicalTermsExplained: list[MedicalTermItem] = Field(default_factory=list)
     urgentFlags: list[str] = Field(default_factory=list)
     sources: list[SourceItem] = Field(default_factory=list)
     disclaimer: str = (
