@@ -232,11 +232,14 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
           (f) => f.needs_confirmation || f.confirmationStatus === 'needs_confirmation' || f.needsReview
         ) || (completedDoc.unclearItems && completedDoc.unclearItems.length > 0);
 
-      if (hasNeedsConfirmation) {
-        setIsVerifying(true);
-      } else {
-        onViewCompletedDocument(completedDoc);
-      }
+      setTimeout(() => {
+        setAnalyzing(false);
+        if (hasNeedsConfirmation) {
+          setIsVerifying(true);
+        } else {
+          onViewCompletedDocument(completedDoc);
+        }
+      }, 500);
     } catch (err: unknown) {
       clearInterval(progressTimer);
       if (err instanceof ApiError) {
@@ -469,7 +472,7 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
       )}
 
       {/* State 2: Active Analysis Progress Pipeline */}
-      {analyzing && (
+      {analyzing && !isVerifying && (
         <div className="space-y-4">
           <div className="p-5 rounded-3xl bg-white border border-[#d8ecea] shadow-md space-y-4">
             <div className="flex items-center justify-between">
@@ -519,10 +522,12 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
               ))}
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Verify Before Save Screen (Task 3 & Task 4 & Frontend requirement) */}
-          {isVerifying && analyzedDoc && (
-            <div className="p-5 rounded-3xl bg-white border border-[#d8ecea] shadow-md space-y-4 animate-in fade-in duration-200">
+      {/* State 3: Verify Before Save Screen (Task 3 & Task 4 & Frontend requirement) */}
+      {isVerifying && analyzedDoc && (
+        <div className="p-5 rounded-3xl bg-white border border-[#d8ecea] shadow-md space-y-4 animate-in fade-in duration-200">
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
@@ -644,7 +649,5 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
             </div>
           )}
         </div>
-      )}
-    </div>
-  );
-};
+      );
+    };
