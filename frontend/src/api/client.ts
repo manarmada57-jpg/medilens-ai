@@ -3,7 +3,16 @@
  * Implements typed requests, flat error envelope parsing, and automatic single-token refresh.
  */
 
-const BASE_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
+function getBaseUrl(): string {
+  const envUrl = (import.meta.env.VITE_API_URL || '').trim().replace(/\/$/, '');
+  if (!envUrl) {
+    return '/api';
+  }
+  // Automatically append /api if missing (e.g. user entered https://host.onrender.com)
+  return envUrl.endsWith('/api') ? envUrl : `${envUrl}/api`;
+}
+
+const BASE_URL = getBaseUrl();
 
 export class ApiError extends Error {
   code: string;
@@ -89,7 +98,11 @@ export interface RequestOptions extends Omit<RequestInit, 'body'> {
 export async function apiClient<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const { params, skipAuth, headers: customHeaders, body, ...restOptions } = options;
 
-  let url = endpoint.startsWith('http') ? endpoint : `${BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  let cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  if (BASE_URL.endsWith('/api') && cleanEndpoint.startsWith('/api/')) {
+    cleanEndpoint = cleanEndpoint.replace(/^\/api/, '');
+  }
+  let url = endpoint.startsWith('http') ? endpoint : `${BASE_URL}${cleanEndpoint}`;
 
   if (params) {
     const searchParams = new URLSearchParams();
