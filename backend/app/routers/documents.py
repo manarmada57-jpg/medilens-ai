@@ -386,12 +386,13 @@ async def analyze_document(
     file_hash = hashlib.sha256(file_bytes).hexdigest()
 
     # Step 1: Text Extraction (PDF vs Image)
+    # Images: use Gemini Vision first (fast cloud OCR), then local engines as fallback.
     extracted_text = ""
     if "pdf" in content_type or filename.lower().endswith(".pdf"):
         clean_pdf = pdf_extractor.strip_metadata(file_bytes)
         extracted_text, _ = pdf_extractor.extract_text(clean_pdf)
     else:
-        extracted_text = ocr_service.extract_text_from_image(file_bytes)
+        extracted_text = await ocr_service.extract_text_from_image_async(file_bytes)
 
     # Step 2: Unreadable Content Check
     if not extracted_text or not ocr_service.is_image_readable(extracted_text):
