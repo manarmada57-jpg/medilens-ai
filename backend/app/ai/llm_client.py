@@ -193,17 +193,20 @@ class LLMClient:
         en_blocks: list[str] = []
         hi_blocks: list[str] = []
 
-        # 1. Biomarkers / Lab Findings
+        # 1. Biomarkers / Lab Findings — parallel RAG lookups for speed
         if findings:
             en_biomarkers: list[str] = []
             hi_biomarkers: list[str] = []
-            for f in findings:
+            names = [f.get("testName", "") for f in findings]
+            rag_results = await asyncio.gather(
+                *[medical_rag.get_grounded_explanation(n) for n in names]
+            )
+            for f, rag_info in zip(findings, rag_results):
                 name = f.get("testName", "")
                 val = f.get("value", "")
                 unit = f.get("unit", "")
                 status = f.get("status", "normal")
                 ref_range = f.get("referenceRange", "")
-                rag_info = await medical_rag.get_grounded_explanation(name)
 
                 name_hi = rag_info.get("name_hi") or name
                 exp_en = rag_info.get("plain_explanation", "")

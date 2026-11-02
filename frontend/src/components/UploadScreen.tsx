@@ -103,6 +103,7 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
   const [isVerifying, setIsVerifying] = useState(false);
   const [editableFindings, setEditableFindings] = useState<Finding[]>([]);
   const [savingChanges, setSavingChanges] = useState(false);
+  const [stillWorking, setStillWorking] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -172,6 +173,7 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
 
     setAnalyzing(true);
     setIsVerifying(false);
+    setStillWorking(false);
     setProgress(15);
     setPipelineSteps([
       { id: 1, title: 'Uploading securely', description: 'Removed EXIF metadata & encrypted transmission', status: 'active', tag: 'Active' },
@@ -215,12 +217,17 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
         return;
       }
 
+      // After 20 s at 92%, show reassurance banner; cleared when result arrives or error fires
+      const stillWorkingTimer = setTimeout(() => setStillWorking(true), 20_000);
+
       const result = await documentsApi.analyzeDocument(uploadFile, {
         kind: selectedMode === 'prescription' ? 'prescription' : 'report',
         language: language,
       });
 
+      clearTimeout(stillWorkingTimer);
       clearInterval(progressTimer);
+      setStillWorking(false);
       const completedDoc = result as HealthDocument;
       setProgress(100);
       setPipelineSteps((steps) => steps.map((s) => ({ ...s, status: 'done', tag: 'Done' })));
@@ -242,6 +249,7 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
       }, 500);
     } catch (err: unknown) {
       clearInterval(progressTimer);
+      setStillWorking(false);
       if (err instanceof ApiError) {
         if (err.status === 503 || err.code === 'FEATURE_UNAVAILABLE') {
           setError('AI document analysis requires an active AI provider key (e.g. GEMINI_API_KEY). Please add your Gemini key to .env to enable instant analysis.');
@@ -521,6 +529,16 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
                 </div>
               ))}
             </div>
+
+            {/* Still-working reassurance banner — shown after 20 s at 92% */}
+            {stillWorking && (
+              <div className="mt-3 flex items-start gap-2 p-3 rounded-2xl bg-amber-50 border border-amber-200">
+                <Loader2 className="w-4 h-4 text-amber-500 animate-spin shrink-0 mt-0.5" />
+                <p className="text-[11px] text-amber-700 leading-snug">
+                  <span className="font-bold">Still working…</span> Complex reports with many test values take up to 60 seconds on first upload. Please keep this tab open.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
