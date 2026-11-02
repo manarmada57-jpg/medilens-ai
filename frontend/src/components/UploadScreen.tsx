@@ -15,7 +15,7 @@ import {
   Languages,
 } from 'lucide-react';
 import { DiagnosticStep, HealthDocument, SkinAnalysisResult, Finding } from '../types';
-import { documentsApi, skinApi } from '../api';
+import { documentsApi, skinApi, tokenStorage } from '../api';
 import { ApiError } from '../api/client';
 
 interface UploadScreenProps {
@@ -157,6 +157,13 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
   };
 
   const startAnalysis = async (file: File, selectedMode: 'report' | 'prescription' | 'image') => {
+    // Validate session
+    const token = tokenStorage.getAccessToken();
+    if (!token) {
+      setError('You are not signed in. Please sign in or register an account to analyze medical documents.');
+      return;
+    }
+
     // Validate file size (20 MB limit)
     if (file.size > 20 * 1024 * 1024) {
       setError('File exceeds the 20 MB size limit. Please upload a smaller document.');
@@ -359,13 +366,25 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
           <div className="space-y-1">
             <p className="text-xs font-bold text-red-800">Processing Interrupted</p>
             <p className="text-xs text-red-600 leading-relaxed">{error}</p>
-            <button
-              onClick={handleRetake}
-              className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-red-100 hover:bg-red-200 text-red-800 text-xs font-bold rounded-lg transition-all"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Try Again</span>
-            </button>
+            <div className="flex items-center gap-2 mt-2">
+              <button
+                type="button"
+                onClick={handleRetake}
+                className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-100 hover:bg-red-200 text-red-800 text-xs font-bold rounded-lg transition-all"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Try Again</span>
+              </button>
+              {!tokenStorage.getAccessToken() && (
+                <button
+                  type="button"
+                  onClick={() => window.dispatchEvent(new CustomEvent('medilens:logout'))}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#0a7075] hover:bg-[#085a5e] text-white text-xs font-bold rounded-lg transition-all"
+                >
+                  <span>Sign In Now</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

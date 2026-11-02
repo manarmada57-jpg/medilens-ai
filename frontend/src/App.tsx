@@ -361,7 +361,6 @@ export default function App() {
               setFlowStep('dashboard');
             }
           }}
-          onCancel={() => setFlowStep('dashboard')}
         />
       </div>
     );
