@@ -28,6 +28,59 @@ interface UploadScreenProps {
   initialFile?: File | null;
 }
 
+async function compressImageIfNeeded(file: File): Promise<File> {
+  if (!file.type.startsWith('image/')) return file;
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const maxDim = 1600;
+      let { width, height } = img;
+      if (width <= maxDim && height <= maxDim) {
+        resolve(file);
+        return;
+      }
+      if (width > height) {
+        height = Math.round((height * maxDim) / width);
+        width = maxDim;
+      } else {
+        width = Math.round((width * maxDim) / height);
+        height = maxDim;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(file);
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            resolve(file);
+            return;
+          }
+          const compressed = new File([blob], file.name.replace(/\.[^/.]+$/, '.jpg'), {
+            type: 'image/jpeg',
+            lastModified: Date.now(),
+          });
+          resolve(compressed);
+        },
+        'image/jpeg',
+        0.88
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(file);
+    };
+    img.src = url;
+  });
+}
+
 export const UploadScreen: React.FC<UploadScreenProps> = ({
   onBack,
   onViewCompletedDocument,
@@ -121,9 +174,31 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
       { id: 5, title: 'Writing plain explanation', description: 'Grounding in MedlinePlus & NIH knowledge', status: 'pending' },
     ]);
 
+    // Active progress timer to smoothly advance steps while backend processes
+    let currentPct = 15;
+    const progressTimer = setInterval(() => {
+      currentPct = Math.min(currentPct + 4, 92);
+      setProgress(currentPct);
+
+      setPipelineSteps((steps) =>
+        steps.map((s) => {
+          if (currentPct >= 80 && s.id <= 4) return { ...s, status: s.id === 5 ? 'active' : 'done', tag: s.id === 5 ? 'Active' : 'Done' };
+          if (currentPct >= 60 && s.id <= 3) return { ...s, status: s.id === 4 ? 'active' : 'done', tag: s.id === 4 ? 'Active' : 'Done' };
+          if (currentPct >= 35 && s.id <= 2) return { ...s, status: s.id === 3 ? 'active' : 'done', tag: s.id === 3 ? 'Active' : 'Done' };
+          if (currentPct >= 20 && s.id <= 1) return { ...s, status: s.id === 2 ? 'active' : 'done', tag: s.id === 2 ? 'Active' : 'Done' };
+          return s;
+        })
+      );
+    }, 800);
+
     try {
+      // Compress large photos on device to speed up upload & prevent timeout
+      const uploadFile = await compressImageIfNeeded(file);
+
       if (selectedMode === 'image') {
-        const skinResult = await skinApi.analyzeSkin(file);
+        const skinResult = await skinApi.analyzeSkin(uploadFile);
+        clearInterval(progressTimer);
+        setProgress(100);
         setPipelineSteps((steps) => steps.map((s) => ({ ...s, status: 'done', tag: 'Done' })));
         if (onViewSkinResult) {
           onViewSkinResult(skinResult);
@@ -133,11 +208,12 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
         return;
       }
 
-      const result = await documentsApi.analyzeDocument(file, {
+      const result = await documentsApi.analyzeDocument(uploadFile, {
         kind: selectedMode === 'prescription' ? 'prescription' : 'report',
         language: language,
       });
 
+      clearInterval(progressTimer);
       const completedDoc = result as HealthDocument;
       setProgress(100);
       setPipelineSteps((steps) => steps.map((s) => ({ ...s, status: 'done', tag: 'Done' })));
@@ -155,6 +231,7 @@ export const UploadScreen: React.FC<UploadScreenProps> = ({
         onViewCompletedDocument(completedDoc);
       }
     } catch (err: unknown) {
+      clearInterval(progressTimer);
       if (err instanceof ApiError) {
         if (err.status === 503 || err.code === 'FEATURE_UNAVAILABLE') {
           setError('AI document analysis requires an active AI provider key (e.g. GEMINI_API_KEY). Please add your Gemini key to .env to enable instant analysis.');

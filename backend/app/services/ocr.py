@@ -34,6 +34,11 @@ class OCRService:
             # Strip EXIF orientation / GPS tags
             clean_image = ImageOps.exif_transpose(raw_image) or raw_image
 
+            # Downscale large phone camera images to max 1600px to ensure fast OCR & avoid OOM on limited RAM
+            max_dim = 1600
+            if max(clean_image.size) > max_dim:
+                clean_image.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+
             # Convert to grayscale for cleaner OCR contrast
             gray_img = clean_image.convert("L")
             processed_buf = io.BytesIO()
